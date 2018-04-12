@@ -11,12 +11,17 @@ import datetime as dt
 import pytz
 import sys
 import os
+import numpy as np
+import itertools
+import rounding
+
+from binary_reader import BinaryReader
 from io import StringIO
 
 __author__ = 'Jonas Lauer (jlauer@meteomatics.com)'
-__copyright__ = 'Copyright (c) 2017 Meteomatics'
+__copyright__ = 'Copyright (c) 2018 Meteomatics'
 __license__ = 'Meteomatics Internal License'
-__version__ = '1.4'
+__version__ = '1.5'
 
 logdepth = 0
 
@@ -38,7 +43,7 @@ def log_info(msg, depth=-1):
     log("INFO ", msg, depth)
 
 
-def CreatePath(_file):
+def create_path(_file):
     _path = os.path.dirname(_file)
     if (os.path.exists(_path) == False) & (len(_path) > 0):
         log_info("Create Path: {}".format(_path))
@@ -46,16 +51,19 @@ def CreatePath(_file):
 
 
 DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
-VERSION = 'python_1.4'
+VERSION = 'python_{}'.format(__version__)
 
 # Templates
-TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/csv?{urlParams}"
-GRID_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/csv?{urlParams}"
+TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"
+GRID_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
+GRID_TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
 GRID_PNG_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/png?{urlParams}"
 LIGHTNING_TEMPLATE = "{api_base_url}/get_lightning_list?time_range={startdate}--{enddate}&bounding_box={lat_N},{lon_W}_{lat_S},{lon_E}&format=csv"
 GRADS_TEMPLATE = "{api_base_url}/{startdate}/{parameters}/{area}/grads?model={model}&{urlParams}"
 NETCDF_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameter_netcdf}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/netcdf?{urlParams}"
 STATIONS_LIST_TEMPLATE = "{api_base_url}/find_station?{urlParams}"
+
+NA_VALUES = ["-666", "-777", "-888", "-999"]
 
 
 class WeatherApiException(Exception):
@@ -63,53 +71,123 @@ class WeatherApiException(Exception):
         super(WeatherApiException, self).__init__(message)
 
 
-def convert_time_series_response_to_df(input, latlon_tuple_list, station=False):
-    try:
-        is_str = isinstance(input, basestring)  # python 2
-    except NameError:
-        is_str = isinstance(input, str)  # python 3
-    finally:
-        if is_str:
-            input = StringIO(input)
+def datenum2date(date_num):
+    total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
+    return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
 
+
+def parse_date_num(s):
+    dates = {date:datenum2date(date) for date in s.unique()}
+    return s.map(dates)
+
+
+def query_api(url, username, password, request_type="GET", timeout_seconds=300, headers={'Accept': 'application/octet-stream'}):
+    try:
+        if request_type.lower() == "get":
+            log_info("Calling URL: {} (username = {})".format(url, username))
+            response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
+        elif request_type.lower() == "post":
+            url_splitted = url.split("/", 4)
+            if len(url_splitted) > 4:
+                url = "/".join(url_splitted[0:4])
+                data = url_splitted[4]
+            else:
+                data = None
+
+            headers['Content-Type'] = "text/plain"
+
+            log_info("Calling URL: {} (username = {})".format(url, username))
+            response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers, data=data)
+        else:
+            raise ValueError('Unknown request_type: {}.'.format(request_type))
+
+        if response.status_code != requests.codes.ok:
+            raise WeatherApiException(response.text)
+
+        return response
+    except requests.ConnectionError as e:
+        raise WeatherApiException(e)
+
+
+def convert_time_series_binary_response_to_df(input, latlon_tuple_list, parameters, station=False):
+    binary_reader = BinaryReader(input)
+
+    parameters_ts = parameters[:]
+
+    if station:
+        # add station_id in the list of parameters
+        parameters_ts.extend(["station_id"])
+    else:
+        # add lat, lon in the list of parameters
+        parameters_ts.extend(["lat", "lon"])
+    dfs = []
     # parse response
-    try:
-        df = pd.read_csv(
-            input,
-            sep=";",
-            header=0,
-            encoding="utf-8",
-            parse_dates=['validdate'],
-            index_col='validdate',
-            na_values=["-999"]
-        )
+    num_of_coords = binary_reader.get_int() if len(latlon_tuple_list) > 1 else 1
 
-        # mark index as UTC timezone
-        df.index = df.index.tz_localize("UTC")
+    for i in range(num_of_coords):
+        dict_data = {}
+        num_of_dates = binary_reader.get_int()
 
-    except:
-        raise WeatherApiException(input.getvalue())
+        for _ in range(num_of_dates):
+            num_of_params = binary_reader.get_int()
+            date = binary_reader.get_double()
+            if station:
+                latlon = tuple([latlon_tuple_list[i]])
+            else:
+                latlon = latlon_tuple_list[i]
+
+            dict_data[date] = binary_reader.get_double(num_of_params) + latlon
+
+        df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=parameters_ts)
+        df = df.sort_index()
+        dfs.append(df)
+
+    df = pd.concat(dfs)
+    df = df.replace(NA_VALUES, float('NaN'))
+    df.index.name = "validdate"
+
+    df.index = parse_date_num(df.reset_index()["validdate"])
+
+    # mark index as UTC timezone
+    df.index = df.index.tz_localize("UTC")
 
     if not station:
-        parameters = [c for c in df.columns if c not in ['lat', 'lon']]
+        parameters_ts = [c for c in df.columns if c not in ['lat', 'lon']]
+
         # extract coordinates
         if 'lat' not in df.columns:
-            df['lat'] = latlon_tuple_list[0][0]
-            df['lon'] = latlon_tuple_list[0][1]
+            if 'station_id' in df.columns:
+                df['lat'] = df['station_id'].apply(lambda x: float(x.split(',')[0]))
+                df['lon'] = df['station_id'].apply(lambda x: float(x.split(',')[1]))
+                df.drop('station_id', axis=1, inplace=True)
+                parameters_ts.remove('station_id')
+            else:
+                df['lat'] = latlon_tuple_list[0][0]
+                df['lon'] = latlon_tuple_list[0][1]
+
+        # replace lat lon with inital coordinates
+        split_point = len(df) / len(latlon_tuple_list)
+        df.reset_index(inplace=True)
+        for i in range(len(latlon_tuple_list)):
+            df.loc[i * split_point: (i + 1) * split_point, 'lat'] = latlon_tuple_list[i][0]
+            df.loc[i * split_point: (i + 1) * split_point, 'lon'] = latlon_tuple_list[i][1]
         # set multiindex
-        df = df.reset_index().set_index(['lat', 'lon', 'validdate'])
+        df = df.set_index(['lat', 'lon', 'validdate'])
     else:
-        parameters = [c for c in df.columns if c not in ['station_id']]
-        # extract coordinates
+        parameters_ts = [c for c in df.columns if c not in ['station_id']]
+        split_point = len(df) / len(latlon_tuple_list)
         if 'station_id' not in df.columns:
-            df['station_id'] = latlon_tuple_list
+            for i in range(len(latlon_tuple_list)):
+                df.loc[int(i * split_point): int((i + 1) * split_point), 'station_id'] = latlon_tuple_list[i]
+
         # set multiindex
         df = df.reset_index().set_index(['station_id', 'validdate'])
+        df = df.sort_index()
+    df = rounding.round_df(df)
+    return df[parameters_ts]
 
-    return df[parameters]
 
-
-def query_station_list(username, password, source=None, parameters=None, enddate=None, location=None,
+def query_station_list(username, password, source=None, parameters=None, startdate=None, enddate=None, location=None,
                        api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
     '''Function to query available stations in API
     source as string
@@ -123,7 +201,10 @@ def query_station_list(username, password, source=None, parameters=None, enddate
         urlParams['source'] = source
 
     if parameters is not None:
-        urlParams['parameter'] = ",".join(parameters)
+        urlParams['parameters'] = ",".join(parameters)
+
+    if startdate is not None:
+        urlParams['startdate'] = dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ")
 
     if enddate is not None:
         urlParams['enddate'] = dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ")
@@ -136,28 +217,7 @@ def query_station_list(username, password, source=None, parameters=None, enddate
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
-
-    # fire request
-    try:
-        response = request(
-            url,
-            auth=requests.auth.HTTPBasicAuth(username, password),
-            headers={'Accept': 'text/csv'}
-        )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+    response = query_api(url, username, password, request_type=request_type)
 
     sl = pd.read_csv(StringIO(response.text), sep=";")
     sl['lat'] = sl['Location Lat,Lon'].apply(lambda x: float(x.split(",")[0]))
@@ -167,7 +227,7 @@ def query_station_list(username, password, source=None, parameters=None, enddate
     return sl
 
 
-def query_station_timeseries(startdate, enddate, interval, parameters, username, password, model='station_mix',
+def query_station_timeseries(startdate, enddate, interval, parameters, username, password, model='mix-obs',
                              latlon_tuple_list=None, wmo_ids=None,
                              metar_ids=None, temporal_interpolation=None, spatial_interpolation=None, on_invalid=None,
                              api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
@@ -190,7 +250,7 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     urlParams = {}
     urlParams['connector'] = VERSION
     if latlon_tuple_list is not None:
-        coordinates += "+" + ("+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]))
+        coordinates += ("+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]))
 
     if wmo_ids is not None:
         if len(coordinates) > 0:
@@ -225,34 +285,16 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
+    headers = {'Accept': 'text/csv'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
 
-    # fire request
-    try:
-        response = request(
-            url,
-            auth=requests.auth.HTTPBasicAuth(username, password),
-            headers={'Accept': 'text/csv'}
-        )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
-
-    return convert_time_series_response_to_df(StringIO(response.text), coordinates, station=True)
+    coordinates_list = coordinates.split("+")
+    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters, station=True)
 
 
 def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameters, username, password, model=None,
-                      ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                      ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL,
+                      request_type='GET'):
     """Retrieve a time series from the Meteomatics Weather API.
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
@@ -278,6 +320,9 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     if interp_select is not None:
         urlParams['interp_select'] = interp_select
 
+    if on_invalid is not None:
+        urlParams['on_invalid'] = on_invalid
+
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
         coordinates="+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]),
@@ -288,63 +333,79 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
+    response = query_api(url, username, password, request_type=request_type)
 
-    # fire request
-    try:
-        response = request(
-            url,
-            auth=requests.auth.HTTPBasicAuth(username, password),
-            headers={'Accept': 'text/csv'}
-        )
+    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
 
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
-
-    return convert_time_series_response_to_df(StringIO(response.text), latlon_tuple_list)
+    return df
 
 
-def convert_grid_response_to_df(input):
-    try:
-        is_str = isinstance(input, basestring)  # python 2
-    except NameError:
-        is_str = isinstance(input, str)  # python 3
-    finally:
-        if is_str:
-            input = StringIO(input)
+def convert_grid_binary_response_to_df(input, parameter_grid=None):
+    binary_reader = BinaryReader(input)
 
-    # parse response
-    try:
-        df = pd.read_csv(
-            input,
-            sep=";",
-            skiprows=[0, 1],
-            header=0,
-            encoding="utf-8",
-            index_col=0,
-            na_values=["-999"]
-        )
+    header = binary_reader.get_string(length=4)
 
-        df.index.name = 'lat'
-        df.columns.name = 'lon'
+    if header != "MBG_":
+        raise WeatherApiException("No MBG received, instead: {}".format(header))
 
-    except:
-        raise WeatherApiException(input.getvalue())
+    version =binary_reader.get_int()
+    precision = binary_reader.get_int()
+    num_payloads_per_forecast = binary_reader.get_int()
+    payload_meta = binary_reader.get_int()
+    num_forecasts = binary_reader.get_int()
+    forecast_date_ux = binary_reader.get_unsigned_long()
 
-    parameter_grid = [c for c in df.columns if c not in ['lat', 'lon']]
+    # precision in bytes
+    DOUBLE = 8
+    FLOAT = 4
 
-    # omit name and id column
-    return df[parameter_grid]
+    if version != 2:
+        raise WeatherApiException("Only MBG version 2 supported, this is version {}".format(version))
+
+    if precision not in [FLOAT, DOUBLE]:
+        raise WeatherApiException("Received wrong precision {}".format(precision))
+
+    if num_payloads_per_forecast > 100000:
+        raise WeatherApiException("numForecasts too big (possibly big-endian): {}".format(num_payloads_per_forecast))
+
+    if num_payloads_per_forecast != 1:
+        raise WeatherApiException("Wrong number of payloads per forecast date received: {}".format(num_payloads_per_forecast))
+
+    if payload_meta != 0:
+        raise WeatherApiException("Wrong payload type received: {}".format(payload_meta))
+
+    if num_forecasts != 1:
+        raise WeatherApiException("Multiple validdates in mbg not yet supported in CacheClient")
+
+    lons = []
+    lats = []
+
+    value_data_type = "float" if precision == FLOAT else "double"
+    num_lat = binary_reader.get_int()
+
+    dict_data = {}
+    for _ in range(num_lat):
+        lats.append(binary_reader.get_double())
+
+    num_lon = binary_reader.get_int()
+    for _ in range(num_lon):
+        lons.append(binary_reader.get_double())
+
+    for _ in range(num_payloads_per_forecast):
+        for lat in lats:
+            values = binary_reader.get(value_data_type, num_lon)
+            dict_data[lat] = values
+
+    df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=lons)
+    df = df.replace(NA_VALUES, float('NaN'))
+    df = df.sort_index(ascending=False)
+
+    df.index.name = 'lat'
+    df.columns.name = 'lon'
+
+    df = df.round(rounding.get_num_decimal_places(parameter_grid))
+
+    return df
 
 
 def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password, model=None,
@@ -379,32 +440,12 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
+    response = query_api(url, username, password, request_type=request_type)
 
-    # fire request
-    try:
-        response = request(url,
-                           auth=requests.auth.HTTPBasicAuth(username, password),
-                           headers={'Accept': 'text/csv'}
-                           )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
-
-    return convert_grid_response_to_df(response.text)
+    return convert_grid_binary_response_to_df(response.content, parameter_grid)
 
 
-def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, username, password, res_lon,
+def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
                          model=None, ens_select=None, interp_select=None, request_type='GET'):
     idxcols = ['valid_date', 'lat', 'lon']
     vd_dfs = []
@@ -441,6 +482,64 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
     return data
 
 
+def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W, lat_S, lon_E,
+                          res_lat, res_lon, username, password, model=None, ens_select=None, interp_select=None,
+                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+    """Retrieve a grid time series from the Meteomatics Weather API.
+       Start and End dates have to be in UTC.
+       Returns a Pandas `DataFrame` with a `DateTimeIndex`.
+       request_type is one of 'GET'/'POST'
+       """
+
+    # set time zone info to UTC if necessary
+    if startdate.tzinfo is None:
+        startdate = startdate.replace(tzinfo=pytz.UTC)
+    if enddate.tzinfo is None:
+        enddate = enddate.replace(tzinfo=pytz.UTC)
+
+    # build URL
+
+    urlParams = {}
+    urlParams['connector'] = VERSION
+    if model is not None:
+        urlParams['model'] = model
+
+    if ens_select is not None:
+        urlParams['ens_select'] = ens_select
+
+    if interp_select is not None:
+        urlParams['interp_select'] = interp_select
+
+    if on_invalid is not None:
+        urlParams['on_invalid'] = on_invalid
+
+    url = GRID_TIME_SERIES_TEMPLATE.format(
+        api_base_url=api_base_url,
+        startdate=startdate.isoformat(),
+        enddate=enddate.isoformat(),
+        interval=isodate.duration_isoformat(interval),
+        lat_N=lat_N,
+        lon_W=lon_W,
+        lat_S=lat_S,
+        lon_E=lon_E,
+        res_lat=res_lat,
+        res_lon=res_lon,
+        parameters=",".join(parameters),
+        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+    )
+
+    response = query_api(url, username, password, request_type=request_type)
+
+    lats = (np.arange(lat_S, lat_N + 1, res_lat))
+    lons = np.arange(lon_W, lon_E + 1, res_lon
+                    )
+
+    latlon_tuple_list = list(itertools.product(lats, lons))
+    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+
+    return df
+
+
 def convert_lightning_response_to_df(input):
     """converts the response of the query of query_lightnings to a pandas DataFrame."""
 
@@ -462,6 +561,9 @@ def convert_lightning_response_to_df(input):
                 parse_dates=['stroke_time:sql'],
                 index_col='stroke_time:sql'
             )
+
+            if df.empty:
+                return df
 
             # mark index as UTC timezone
             df.index = df.index.tz_localize("UTC")
@@ -501,28 +603,8 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
         lon_E=lon_E
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
-
-    # fire request
-    try:
-        response = request(
-            url,
-            auth=requests.auth.HTTPBasicAuth(username, password),
-            headers={'Accept': 'text/csv'}
-        )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+    headers = {'Accept': 'text/csv'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     return convert_lightning_response_to_df(response.text)
 
@@ -568,30 +650,11 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
-
-    # fire request
-    try:
-        response = request(url,
-                           auth=requests.auth.HTTPBasicAuth(username, password),
-                           headers={'Accept': 'text/netcdf'}, stream=True,
-                           )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+    headers = {'Accept': 'application/netcdf'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     # Check if target directory exists
-    CreatePath(filename)
+    create_path(filename)
 
     # save to the specified filename
     with open(filename, 'wb') as f:
@@ -639,27 +702,8 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
-
-    # fire request
-    try:
-        response = request(url,
-                           auth=requests.auth.HTTPBasicAuth(username, password),
-                           headers={'Accept': 'image/png'}, stream=True,
-                           )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+    headers = {'Accept': 'image/png'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     # save to the specified filename
     with open(filename, 'wb') as f:
@@ -717,30 +761,11 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
     )
 
-    log_info("Calling URL: {} (username = {})".format(url, username))
-    # determine request type
-    if request_type.lower() == 'get':
-        request = requests.get
-    elif request_type.lower() == 'post':
-        request = requests.post
-    else:
-        raise ValueError('Unknown request_type: {}.'.format(request_type))
-
-    # fire request
-    try:
-        response = request(url,
-                           auth=requests.auth.HTTPBasicAuth(username, password),
-                           headers={'Accept': 'image/grads'}, stream=True,
-                           )
-
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
-
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+    headers = {'Accept': 'image/png'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     # save to the specified filename
-    CreatePath(filename)
+    create_path(filename)
     with open(filename, 'wb') as f:
         log_info('Create File {}'.format(filename))
         for chunk in response.iter_content():
