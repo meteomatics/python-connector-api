@@ -21,7 +21,7 @@ from io import StringIO
 __author__ = 'Jonas Lauer (jlauer@meteomatics.com)'
 __copyright__ = 'Copyright (c) 2018 Meteomatics'
 __license__ = 'Meteomatics Internal License'
-__version__ = '1.5'
+__version__ = '1.5.1'
 
 logdepth = 0
 
@@ -72,8 +72,11 @@ class WeatherApiException(Exception):
 
 
 def datenum2date(date_num):
-    total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
-    return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
+    if pd.isnull(date_num):
+        return pd.NaT
+    else:
+        total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
+        return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
 
 
 def parse_date_num(s):
@@ -136,7 +139,10 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
             else:
                 latlon = latlon_tuple_list[i]
 
-            dict_data[date] = binary_reader.get_double(num_of_params) + latlon
+            value = binary_reader.get_double(num_of_params)
+            if type(value) is not tuple:
+                value = (value, )
+            dict_data[date] = value + latlon
 
         df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=parameters_ts)
         df = df.sort_index()
@@ -150,6 +156,11 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
 
     # mark index as UTC timezone
     df.index = df.index.tz_localize("UTC")
+
+    # parse parameters which are queried as sql dates but arrive as date_num
+    for parameter in parameters_ts:
+        if parameter.endswith(":sql"):
+            df[parameter] = parse_date_num(df[parameter])
 
     if not station:
         parameters_ts = [c for c in df.columns if c not in ['lat', 'lon']]
@@ -403,7 +414,10 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
     df.index.name = 'lat'
     df.columns.name = 'lon'
 
-    df = df.round(rounding.get_num_decimal_places(parameter_grid))
+    if parameter_grid.endswith(":sql"):
+        df = df.apply(parse_date_num, axis='index')
+    else:
+        df = df.round(rounding.get_num_decimal_places(parameter_grid))
 
     return df
 

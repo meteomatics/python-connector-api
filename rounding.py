@@ -90,6 +90,9 @@ def get_num_decimal_places(parameter):
     elif unit == "d":
         if "lats" in parameter or "lons" in parameter:
             return 5
+        for marker in ["dir", "days", "nights", "moon_age"]:
+            if marker in parameter:
+                return 1
 
     elif unit == "m":
         if parameter == "roughness_length:m":
@@ -97,11 +100,14 @@ def get_num_decimal_places(parameter):
         else:
             return 1
 
+    return 3
+
 
 def round_df(df):
     for column in df.columns:
-        sig_num = get_num_decimal_places(column)
-        df[column] = df[column].round(sig_num)
+        if not column.endswith(":sql"):
+            sig_num = get_num_decimal_places(column)
+            df[column] = df[column].round(sig_num)
     return df
 
 
