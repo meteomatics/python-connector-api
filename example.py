@@ -193,6 +193,14 @@ def example():
         print("Failed, the exception is {}".format(e))
 
 
+    print("\nget init dates:")
+    try:
+        df_init_dates = api.query_init_date(now, now + dt.timedelta(days=2), dt.timedelta(hours=3), 't_2m:C', username, password, 'ecmwf-ens')
+        print(df_init_dates.head())
+    except Exception as e:
+        print("Failed, the exception is {}".format(e))
+
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--username', default=username)

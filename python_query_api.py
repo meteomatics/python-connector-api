@@ -62,6 +62,7 @@ LIGHTNING_TEMPLATE = "{api_base_url}/get_lightning_list?time_range={startdate}--
 GRADS_TEMPLATE = "{api_base_url}/{startdate}/{parameters}/{area}/grads?model={model}&{urlParams}"
 NETCDF_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameter_netcdf}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/netcdf?{urlParams}"
 STATIONS_LIST_TEMPLATE = "{api_base_url}/find_station?{urlParams}"
+INIT_DATE_TEMPLATE = "{api_base_url}/get_init_date?model={model}&valid_date={interval_string}&parameters={parameter}"
 
 NA_VALUES = ["-666", "-777", "-888", "-999"]
 
@@ -677,6 +678,43 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
             f.write(chunk)
 
     return
+
+
+def query_init_date(startdate, enddate, interval, parameter, username, password, model,
+                    api_base_url=DEFAULT_API_BASE_URL):
+    # set time zone info to UTC if necessary
+    if startdate.tzinfo is None:
+        startdate = startdate.replace(tzinfo=pytz.UTC)
+    if enddate.tzinfo is None:
+        enddate = enddate.replace(tzinfo=pytz.UTC)
+
+    interval_string = "{}--{}:{}".format(startdate.isoformat(),
+                                         enddate.isoformat(),
+                                         isodate.duration_isoformat(interval))
+
+    url = INIT_DATE_TEMPLATE.format(api_base_url=api_base_url,
+                                    model=model, interval_string=interval_string, parameter=parameter)
+
+    headers = {'Accept': 'text/csv'}
+    response = query_api(url, username, password, request_type='GET', headers=headers)
+
+    try:
+        df = pd.read_csv(
+            StringIO(response.text),
+            sep=";",
+            header=0,
+            encoding="utf-8",
+            index_col=0,
+            na_values=["0000-00-00T00:00:00Z"],
+            parse_dates=[0, 1]
+        )
+    except:
+        raise WeatherApiException(response.text)
+
+    # mark index as UTC timezone
+    df.index = df.index.tz_localize("UTC")
+
+    return df
 
 
 def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username,
