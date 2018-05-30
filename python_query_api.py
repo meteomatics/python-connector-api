@@ -21,7 +21,7 @@ from io import StringIO
 __author__ = 'Jonas Lauer (jlauer@meteomatics.com)'
 __copyright__ = 'Copyright (c) 2018 Meteomatics'
 __license__ = 'Meteomatics Internal License'
-__version__ = '1.5.1'
+__version__ = '1.5.2'
 
 logdepth = 0
 
