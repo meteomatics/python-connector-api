@@ -64,7 +64,7 @@ NETCDF_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameter_n
 STATIONS_LIST_TEMPLATE = "{api_base_url}/find_station?{urlParams}"
 INIT_DATE_TEMPLATE = "{api_base_url}/get_init_date?model={model}&valid_date={interval_string}&parameters={parameter}"
 
-NA_VALUES = ["-666", "-777", "-888", "-999"]
+NA_VALUES = [-666, -777, -888, -999]
 
 
 class WeatherApiException(Exception):
