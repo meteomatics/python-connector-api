@@ -21,7 +21,7 @@ from io import StringIO
 __author__ = 'Jonas Lauer (jlauer@meteomatics.com)'
 __copyright__ = 'Copyright (c) 2018 Meteomatics'
 __license__ = 'Meteomatics Internal License'
-__version__ = '1.5.2'
+__version__ = '1.5.3'
 
 logdepth = 0
 
@@ -545,9 +545,8 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
     response = query_api(url, username, password, request_type=request_type)
 
-    lats = (np.arange(lat_S, lat_N + 1, res_lat))
-    lons = np.arange(lon_W, lon_E + 1, res_lon
-                    )
+    lats = arange(lat_S, lat_N, res_lat)
+    lons = arange(lon_W, lon_E, res_lon)
 
     latlon_tuple_list = list(itertools.product(lats, lons))
     df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
@@ -894,3 +893,13 @@ def query_grads_timeseries(prefixpath, startdate, enddate, interval, parameters,
         this_date = this_date + interval
 
     return
+
+
+def arange(start, stop, step):
+    data = []
+    if start >= stop:
+        return data
+    while start <= stop:
+        data.append(start)
+        start = round(start + step, 10)
+    return data
