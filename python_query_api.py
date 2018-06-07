@@ -81,11 +81,12 @@ def datenum2date(date_num):
 
 
 def parse_date_num(s):
-    dates = {date:datenum2date(date) for date in s.unique()}
+    dates = {date: datenum2date(date) for date in s.unique()}
     return s.map(dates)
 
 
-def query_api(url, username, password, request_type="GET", timeout_seconds=300, headers={'Accept': 'application/octet-stream'}):
+def query_api(url, username, password, request_type="GET", timeout_seconds=300,
+              headers={'Accept': 'application/octet-stream'}):
     try:
         if request_type.lower() == "get":
             log_info("Calling URL: {} (username = {})".format(url, username))
@@ -101,7 +102,8 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300, 
             headers['Content-Type'] = "text/plain"
 
             log_info("Calling URL: {} (username = {})".format(url, username))
-            response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers, data=data)
+            response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
+                                     data=data)
         else:
             raise ValueError('Unknown request_type: {}.'.format(request_type))
 
@@ -142,7 +144,7 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
 
             value = binary_reader.get_double(num_of_params)
             if type(value) is not tuple:
-                value = (value, )
+                value = (value,)
             dict_data[date] = value + latlon
 
         df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=parameters_ts)
@@ -360,7 +362,7 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
     if header != "MBG_":
         raise WeatherApiException("No MBG received, instead: {}".format(header))
 
-    version =binary_reader.get_int()
+    version = binary_reader.get_int()
     precision = binary_reader.get_int()
     num_payloads_per_forecast = binary_reader.get_int()
     payload_meta = binary_reader.get_int()
@@ -381,7 +383,8 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
         raise WeatherApiException("numForecasts too big (possibly big-endian): {}".format(num_payloads_per_forecast))
 
     if num_payloads_per_forecast != 1:
-        raise WeatherApiException("Wrong number of payloads per forecast date received: {}".format(num_payloads_per_forecast))
+        raise WeatherApiException(
+            "Wrong number of payloads per forecast date received: {}".format(num_payloads_per_forecast))
 
     if payload_meta != 0:
         raise WeatherApiException("Wrong payload type received: {}".format(payload_meta))
