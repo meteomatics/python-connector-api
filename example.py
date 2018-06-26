@@ -16,9 +16,10 @@ import sys
 '''
 
 ###Credentials:
-
-username = 'python-community'  # TODO
-password = 'Erumukete173'  # TODO
+# You may use the community account for first tests.
+# Since it is very limited and shared among testers, please set your personal account for extended tests or operational use.
+username = 'python-community'
+password = 'Umivipawe179'
 
 def example():
     ###Input timeseries:
