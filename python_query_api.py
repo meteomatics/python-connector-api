@@ -115,6 +115,16 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
         raise WeatherApiException(e)
 
 
+def query_user_features(username, password):
+    """Get user features"""
+    response = requests.get('http://api.meteomatics.com/user_stats_json',
+                            auth=(username, password)
+                            )
+    data = response.json()
+    limits_of_interest = ['historic request option', 'model select option', 'area request option']
+    return {key: data['user statistics'][key] for key in limits_of_interest}
+
+
 def convert_time_series_binary_response_to_df(input, latlon_tuple_list, parameters, station=False):
     binary_reader = BinaryReader(input)
 
