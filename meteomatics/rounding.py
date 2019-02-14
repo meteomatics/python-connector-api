@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 decimal_places = dict([
     ("cm",      1), # centimeters (snow height)
     ("C",       1), # temperature

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import struct
 
 
@@ -7,7 +9,6 @@ class BinaryReaderException(Exception):
 
 
 class BinaryReader(object):
-
     DATA_TYPES = {
         "double": {"format_char": "d", "num_of_bytes": 8},
         "float": {"format_char": "f", "num_of_bytes": 4},
@@ -31,15 +32,17 @@ class BinaryReader(object):
             num_of_bytes = self.DATA_TYPES[data_type]["num_of_bytes"]
         except KeyError as e:
             raise BinaryReaderException("Data type: '{}' is not valid. Valid types: [{}]".format(data_type,
-                                                                                           ", ".join(self.DATA_TYPES.keys())))
+                                                                                                 ", ".join(
+                                                                                                     self.DATA_TYPES.keys())))
 
-        substring = self._binary_data[self._pointer:self._pointer+num_of_bytes*n]
+        substring = self._binary_data[self._pointer:self._pointer + num_of_bytes * n]
 
-        if len(substring) != num_of_bytes*n:
-            raise BinaryReaderException("Not possible to read {} bytes, length of binary data is {} bytes".format(num_of_bytes*n,
-                                                                                                          len(self)))
-        self._pointer += num_of_bytes*n
-        return struct.unpack("<{}".format(self.DATA_TYPES[data_type]["format_char"]*n), substring)
+        if len(substring) != num_of_bytes * n:
+            raise BinaryReaderException(
+                "Not possible to read {} bytes, length of binary data is {} bytes".format(num_of_bytes * n,
+                                                                                          len(self)))
+        self._pointer += num_of_bytes * n
+        return struct.unpack("<{}".format(self.DATA_TYPES[data_type]["format_char"] * n), substring)
 
     def get(self, data_type, n=1):
         try:
@@ -70,7 +73,8 @@ class BinaryReader(object):
 
     def get_string(self, length):
         if length > len(self):
-            raise BinaryReaderException("Not possible to read string with length {}, length of binary data is {}".format(length,
-                                                                                                                       len(self)))
+            raise BinaryReaderException(
+                "Not possible to read string with length {}, length of binary data is {}".format(length,
+                                                                                                 len(self)))
         data = self.get("char", length)
         return "".join([c.decode("utf-8") for c in data])

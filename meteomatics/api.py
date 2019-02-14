@@ -1,27 +1,21 @@
-# !/usr/bin/env python
 # -*- coding: utf-8 -*-
-# coding:=utf-8
 
 """Meteomatics Weather API Connector"""
 
-import isodate
-import requests
-import pandas as pd
 import datetime as dt
-import pytz
-import sys
-import os
-import numpy as np
 import itertools
-import rounding
-
-from binary_reader import BinaryReader
+import os
+import sys
 from io import StringIO
+from . import __version__
 
-__author__ = 'Jonas Lauer (jlauer@meteomatics.com)'
-__copyright__ = 'Copyright (c) 2018 Meteomatics'
-__license__ = 'Meteomatics Internal License'
-__version__ = '1.5.4'
+import isodate
+import pandas as pd
+import pytz
+import requests
+
+import rounding
+from binary_reader import BinaryReader
 
 logdepth = 0
 
@@ -35,12 +29,12 @@ def log(lvl, msg, depth=-1):
 
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     prefix = "   " * depth
-    print (now, "|", lvl, "|", prefix + msg)
+    print (now + "| " + lvl + " |" + prefix + msg)
     sys.stdout.flush()
 
 
 def log_info(msg, depth=-1):
-    log("INFO ", msg, depth)
+    log("INFO", msg, depth)
 
 
 def create_path(_file):
@@ -63,6 +57,7 @@ GRADS_TEMPLATE = "{api_base_url}/{startdate}/{parameters}/{area}/grads?model={mo
 NETCDF_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameter_netcdf}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/netcdf?{urlParams}"
 STATIONS_LIST_TEMPLATE = "{api_base_url}/find_station?{urlParams}"
 INIT_DATE_TEMPLATE = "{api_base_url}/get_init_date?model={model}&valid_date={interval_string}&parameters={parameter}"
+AVAILABLE_TIME_RANGES_TEMPLATE = "{api_base_url}/get_time_range?model={model}&parameters={parameters}"
 
 NA_VALUES = [-666, -777, -888, -999]
 
@@ -83,6 +78,15 @@ def datenum2date(date_num):
 def parse_date_num(s):
     dates = {date: datenum2date(date) for date in s.unique()}
     return s.map(dates)
+
+
+def sanitize_datetime(in_date):
+    try:
+        if in_date.tzinfo is None:
+            return in_date.replace(tzinfo=pytz.UTC)
+        return in_date
+    except AttributeError:
+        raise TypeError('Please use datetime.datetime instead of {}'.format(type(in_date)))
 
 
 def query_api(url, username, password, request_type="GET", timeout_seconds=300,
@@ -122,7 +126,11 @@ def query_user_features(username, password):
                             )
     data = response.json()
     limits_of_interest = ['historic request option', 'model select option', 'area request option']
-    return {key: data['user statistics'][key] for key in limits_of_interest}
+    try:
+        return {key: data['user statistics'][key] for key in limits_of_interest}
+    except TypeError:
+        user_data = next(d for d in data['user statistics'] if d['username'] == username)
+        return {key: user_data[key] for key in limits_of_interest}
 
 
 def convert_time_series_binary_response_to_df(input, latlon_tuple_list, parameters, station=False):
@@ -148,9 +156,11 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
             num_of_params = binary_reader.get_int()
             date = binary_reader.get_double()
             if station:
-                latlon = tuple([latlon_tuple_list[i]])
+                latlon = [latlon_tuple_list[i]]
             else:
                 latlon = latlon_tuple_list[i]
+            # ensure tuple
+            latlon = tuple(latlon)
 
             value = binary_reader.get_double(num_of_params)
             if type(value) is not tuple:
@@ -212,13 +222,14 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
 
 
 def query_station_list(username, password, source=None, parameters=None, startdate=None, enddate=None, location=None,
-                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET', elevation=None, id=None):
     '''Function to query available stations in API
     source as string
     parameters as list
     enddate as datetime object
     location as string (e.g. "40,10")
     request_type is one of 'GET'/'POST'
+    elevation as integer/float (e.g. 1050 ; 0.5)
     '''
     urlParams = {}
     if source is not None:
@@ -236,6 +247,12 @@ def query_station_list(username, password, source=None, parameters=None, startda
     if location is not None:
         urlParams['location'] = location
 
+    if elevation is not None:
+        urlParams['elevation'] = elevation
+
+    if id is not None:
+        urlParams['id'] = id
+
     url = STATIONS_LIST_TEMPLATE.format(
         api_base_url=api_base_url,
         urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
@@ -252,7 +269,7 @@ def query_station_list(username, password, source=None, parameters=None, startda
 
 
 def query_station_timeseries(startdate, enddate, interval, parameters, username, password, model='mix-obs',
-                             latlon_tuple_list=None, wmo_ids=None,
+                             latlon_tuple_list=None, wmo_ids=None, mch_ids=None, general_ids=None, hash_ids=None,
                              metar_ids=None, temporal_interpolation=None, spatial_interpolation=None, on_invalid=None,
                              api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
     """Retrieve a time series from the Meteomatics Weather API.
@@ -263,29 +280,85 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     """
 
     # set time zone info to UTC if necessary
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     # build URL
 
-    coordinates = ""
+    coordinate_blocks = []
     urlParams = {}
     urlParams['connector'] = VERSION
     if latlon_tuple_list is not None:
-        coordinates += ("+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]))
+        coordinate_blocks += ("+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]),)
 
     if wmo_ids is not None:
-        if len(coordinates) > 0:
-            coordinates += "+" + "+".join(['wmo_' + s for s in wmo_ids])
-        else:
-            coordinates += "+".join(['wmo_' + s for s in wmo_ids])
+        coordinate_blocks += ("+".join(['wmo_' + s for s in wmo_ids]),)
+
     if metar_ids is not None:
-        if len(coordinates) > 0:
-            coordinates += "+" + "+".join(['metar_' + s for s in metar_ids])
-        else:
-            coordinates += "+".join(['metar_' + s for s in metar_ids])
+        coordinate_blocks += ("+".join(['metar_' + s for s in metar_ids]),)
+
+    if mch_ids is not None:
+        coordinate_blocks += ("+".join(['mch_' + s for s in mch_ids]),)
+
+    if general_ids is not None:
+        coordinate_blocks += ("+".join(['id_' + s for s in general_ids]),)
+
+    if hash_ids is not None:
+        coordinate_blocks += ("+".join([s for s in hash_ids]),)
+
+    coordinates = '+'.join(coordinate_blocks)
+
+    if model is not None:
+        urlParams['model'] = model
+
+    if on_invalid is not None:
+        urlParams['on_invalid'] = on_invalid
+
+    if temporal_interpolation is not None:
+        urlParams['temporal_interpolation'] = temporal_interpolation
+
+    if spatial_interpolation is not None:
+        urlParams['spatial_interpolation'] = spatial_interpolation
+
+    url = TIME_SERIES_TEMPLATE.format(
+        api_base_url=api_base_url,
+        coordinates=coordinates,
+        startdate=startdate.isoformat(),
+        enddate=enddate.isoformat(),
+        interval=isodate.duration_isoformat(interval),
+        parameters=",".join(parameters),
+        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+    )
+
+    headers = {'Accept': 'text/csv'}
+    response = query_api(url, username, password, request_type=request_type, headers=headers)
+
+    coordinates_list = coordinates.split("+")
+    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters, station=True)
+
+
+def query_special_locations_timeseries(startdate, enddate, interval, parameters, username, password, model='mix',
+                                       postal_codes=None, temporal_interpolation=None, spatial_interpolation=None,
+                                       on_invalid=None,
+                                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+    """Retrieve a time series from the Meteomatics Weather API.
+    Requested locations can be soecified by Postal Codes; Input as dictionary, e.g.: postal_codes={'DE': [71679,70173], ...}.
+    Start and End dates have to be in UTC.
+    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
+    request_type is one of 'GET/POST'
+    """
+
+    # set time zone info to UTC if necessary
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
+
+    # build URL
+    coordinates = ""
+    urlParams = {}
+    urlParams['connector'] = VERSION
+    if postal_codes is not None:
+        for country, pcs in postal_codes.items():
+            coordinates += "+".join(['postal_' + country.upper() + s for s in pcs])
 
     if model is not None:
         urlParams['model'] = model
@@ -317,8 +390,9 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
 
 
 def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameters, username, password, model=None,
-                      ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL,
-                      request_type='GET'):
+                      ens_select=None, interp_select=None, on_invalid=None,
+                      api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None,
+                      **kwargs):
     """Retrieve a time series from the Meteomatics Weather API.
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
@@ -326,10 +400,8 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     """
 
     # set time zone info to UTC if necessary
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     # build URL
 
@@ -341,11 +413,18 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     if ens_select is not None:
         urlParams['ens_select'] = ens_select
 
+    if cluster_select is not None:
+        urlParams['cluster_select'] = cluster_select
+
     if interp_select is not None:
         urlParams['interp_select'] = interp_select
 
     if on_invalid is not None:
         urlParams['on_invalid'] = on_invalid
+
+    for (key, value) in kwargs.items():
+        if key not in urlParams:
+            urlParams[key] = value
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -364,7 +443,7 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     return df
 
 
-def convert_grid_binary_response_to_df(input, parameter_grid=None):
+def convert_grid_binary_response_to_df(input, parameter_grid):
     binary_reader = BinaryReader(input)
 
     header = binary_reader.get_string(length=4)
@@ -377,7 +456,7 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
     num_payloads_per_forecast = binary_reader.get_int()
     payload_meta = binary_reader.get_int()
     num_forecasts = binary_reader.get_int()
-    forecast_date_ux = binary_reader.get_unsigned_long()
+    forecast_dates_ux = [binary_reader.get_unsigned_long() for _ in range(num_forecasts)]
 
     # precision in bytes
     DOUBLE = 8
@@ -399,16 +478,12 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
     if payload_meta != 0:
         raise WeatherApiException("Wrong payload type received: {}".format(payload_meta))
 
-    if num_forecasts != 1:
-        raise WeatherApiException("Multiple validdates in mbg not yet supported in CacheClient")
-
     lons = []
     lats = []
 
     value_data_type = "float" if precision == FLOAT else "double"
     num_lat = binary_reader.get_int()
 
-    dict_data = {}
     for _ in range(num_lat):
         lats.append(binary_reader.get_double())
 
@@ -416,31 +491,39 @@ def convert_grid_binary_response_to_df(input, parameter_grid=None):
     for _ in range(num_lon):
         lons.append(binary_reader.get_double())
 
-    for _ in range(num_payloads_per_forecast):
-        for lat in lats:
-            values = binary_reader.get(value_data_type, num_lon)
-            dict_data[lat] = values
+    dates_dict = dict()
+    for forecast_date_ux in forecast_dates_ux:
+        dict_data = {}
+        for _ in range(num_payloads_per_forecast):
+            for lat in lats:
+                values = binary_reader.get(value_data_type, num_lon)
+                dict_data[lat] = values
 
-    df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=lons)
-    df = df.replace(NA_VALUES, float('NaN'))
-    df = df.sort_index(ascending=False)
+        df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=lons)
+        df = df.replace(NA_VALUES, float('NaN'))
+        df = df.sort_index(ascending=False)
 
-    df.index.name = 'lat'
-    df.columns.name = 'lon'
+        df.index.name = 'lat'
+        df.columns.name = 'lon'
 
-    if parameter_grid.endswith(":sql"):
-        df = df.apply(parse_date_num, axis='index')
-    else:
-        df = df.round(rounding.get_num_decimal_places(parameter_grid))
+        if parameter_grid is not None and parameter_grid.endswith(":sql"):
+            df = df.apply(parse_date_num, axis='index')
+        else:
+            df = df.round(rounding.get_num_decimal_places(parameter_grid))
 
-    return df
+        if num_forecasts == 1:
+            return df
+        else:
+            dates_dict[dt.datetime.utcfromtimestamp(forecast_date_ux)] = df.copy()
+
+    return dates_dict
 
 
 def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password, model=None,
-               ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+               ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
+               **kwargs):
     # interpret time as UTC
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
 
     # build URL
 
@@ -454,6 +537,10 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
     if interp_select is not None:
         urlParams['interp_select'] = interp_select
+
+    for (key, value) in kwargs.items():
+        if key not in urlParams:
+            urlParams[key] = value
 
     url = GRID_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -520,10 +607,8 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
        """
 
     # set time zone info to UTC if necessary
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     # build URL
 
@@ -613,11 +698,8 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
     request_type is one of 'GET'/'POST'
     """
     # interpret time as UTC
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     # build URL
     url = LIGHTNING_TEMPLATE.format(
@@ -644,10 +726,8 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
     """
 
     # set time zone info to UTC if necessary
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     # build URL
 
@@ -686,7 +766,7 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
     # save to the specified filename
     with open(filename, 'wb') as f:
         log_info('Create File {}'.format(filename))
-        for chunk in response.iter_content():
+        for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
     return
@@ -695,10 +775,8 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
 def query_init_date(startdate, enddate, interval, parameter, username, password, model,
                     api_base_url=DEFAULT_API_BASE_URL):
     # set time zone info to UTC if necessary
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
-    if enddate.tzinfo is None:
-        enddate = enddate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
 
     interval_string = "{}--{}:{}".format(startdate.isoformat(),
                                          enddate.isoformat(),
@@ -729,6 +807,29 @@ def query_init_date(startdate, enddate, interval, parameter, username, password,
     return df
 
 
+def query_available_time_ranges(parameters, username, password, model, api_base_url=DEFAULT_API_BASE_URL):
+    url = AVAILABLE_TIME_RANGES_TEMPLATE.format(api_base_url=api_base_url,
+                                                model=model, parameters=",".join(parameters))
+
+    headers = {'Accept': 'text/csv'}
+    response = query_api(url, username, password, request_type='GET', headers=headers)
+
+    try:
+        df = pd.read_csv(
+            StringIO(response.text),
+            sep=";",
+            header=0,
+            encoding="utf-8",
+            index_col=0,
+            na_values=["0000-00-00T00:00:00Z"],
+            parse_dates=['min_date', 'max_date']
+        )
+    except:
+        raise WeatherApiException(response.text)
+
+    return df
+
+
 def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username,
                    password, model=None, ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL,
                    request_type='GET'):
@@ -737,8 +838,7 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
     """
 
     # interpret time as UTC
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
 
     # build URL
 
@@ -772,7 +872,7 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
     # save to the specified filename
     with open(filename, 'wb') as f:
         log_info('Create File {}'.format(filename))
-        for chunk in response.iter_content():
+        for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
     return
@@ -798,8 +898,7 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
     """
 
     # interpret time as UTC
-    if startdate.tzinfo is None:
-        startdate = startdate.replace(tzinfo=pytz.UTC)
+    startdate = sanitize_datetime(startdate)
 
     # build URL
     urlParams = {}
@@ -832,7 +931,7 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
     create_path(filename)
     with open(filename, 'wb') as f:
         log_info('Create File {}'.format(filename))
-        for chunk in response.iter_content():
+        for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
     return
