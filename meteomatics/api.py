@@ -14,8 +14,8 @@ import pandas as pd
 import pytz
 import requests
 
-import rounding
-from binary_reader import BinaryReader
+from . import rounding
+from .binary_reader import BinaryReader
 
 logdepth = 0
 
