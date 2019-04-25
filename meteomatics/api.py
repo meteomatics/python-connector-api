@@ -80,6 +80,37 @@ def parse_date_num(s):
     return s.map(dates)
 
 
+def parse_ens(ens_str):
+    """Build the members strings for the ensemble answer"""
+    components = ens_str.split(',')
+    out = []
+    for c in components:
+        if 'member:' in c:
+            numbers = c.lstrip('member:')
+            if '-' in numbers:
+                start, end = numbers.split('-')
+                numbers = range(int(start), int(end) + 1)
+            else:
+                numbers = (int(numbers), )
+            for n in numbers:
+                out.append('m{}'.format(n))
+        else:
+            out.append(c)
+    return out
+
+
+def build_response_params(params, ens_params):
+    """Combine member strings with the parameter list"""
+    out = []
+    for param in params:
+        for ens in ens_params:
+            if ens == 'm0':
+                out.append(param)
+            else:
+                out.append('{}-{}'.format(param, ens))
+    return out
+
+
 def sanitize_datetime(in_date):
     try:
         if in_date.tzinfo is None:
@@ -412,6 +443,8 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
 
     if ens_select is not None:
         urlParams['ens_select'] = ens_select
+        ens_parameters = parse_ens(ens_select)
+        extended_params = build_response_params(parameters, ens_parameters)
 
     if cluster_select is not None:
         urlParams['cluster_select'] = cluster_select
@@ -438,7 +471,10 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
 
     response = query_api(url, username, password, request_type=request_type)
 
-    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+    if ens_select is not None:
+        df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params)
+    else:
+        df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
 
     return df
 
