@@ -837,9 +837,6 @@ def query_init_date(startdate, enddate, interval, parameter, username, password,
     except:
         raise WeatherApiException(response.text)
 
-    # mark index as UTC timezone
-    df.index = df.index.tz_localize("UTC")
-
     return df
 
 
