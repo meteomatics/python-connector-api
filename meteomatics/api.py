@@ -45,7 +45,7 @@ def create_path(_file):
 
 
 DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
-VERSION = 'python_{}'.format(__version__)
+VERSION = 'python_v{}'.format(__version__)
 
 # Templates
 TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"
