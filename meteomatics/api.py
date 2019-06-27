@@ -47,6 +47,9 @@ def create_path(_file):
 DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
 VERSION = 'python_v{}'.format(__version__)
 
+# Proxy
+PROXIES = None
+
 # Templates
 TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"
 GRID_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
@@ -120,12 +123,18 @@ def sanitize_datetime(in_date):
         raise TypeError('Please use datetime.datetime instead of {}'.format(type(in_date)))
 
 
+def set_default_proxies(proxies):
+    global PROXIES
+    PROXIES = proxies
+
+
 def query_api(url, username, password, request_type="GET", timeout_seconds=300,
               headers={'Accept': 'application/octet-stream'}):
     try:
         if request_type.lower() == "get":
             log_info("Calling URL: {} (username = {})".format(url, username))
-            response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
+            response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
+                                    proxies=PROXIES)
         elif request_type.lower() == "post":
             url_splitted = url.split("/", 4)
             if len(url_splitted) > 4:
@@ -138,7 +147,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
 
             log_info("Calling URL: {} (username = {})".format(url, username))
             response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
-                                     data=data)
+                                     data=data, proxies=PROXIES)
         else:
             raise ValueError('Unknown request_type: {}.'.format(request_type))
 
@@ -150,11 +159,11 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
         raise WeatherApiException(e)
 
 
-def query_user_features(username, password):
+def query_user_features(username, password, api_base_url=DEFAULT_API_BASE_URL):
     """Get user features"""
-    response = requests.get('http://api.meteomatics.com/user_stats_json',
-                            auth=(username, password)
-                            )
+    url = "{api_base_url}/user_stats_json".format(api_base_url=api_base_url)
+    response = requests.get(url, auth=(username, password), proxies=PROXIES)
+
     data = response.json()
     limits_of_interest = ['historic request option', 'model select option', 'area request option']
     try:
