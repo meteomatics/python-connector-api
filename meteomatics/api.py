@@ -16,6 +16,7 @@ import requests
 
 from . import rounding
 from .binary_reader import BinaryReader
+from .exceptions import API_EXCEPTIONS, WeatherApiException
 
 logdepth = 0
 
@@ -60,11 +61,6 @@ INIT_DATE_TEMPLATE = "{api_base_url}/get_init_date?model={model}&valid_date={int
 AVAILABLE_TIME_RANGES_TEMPLATE = "{api_base_url}/get_time_range?model={model}&parameters={parameters}"
 
 NA_VALUES = [-666, -777, -888, -999]
-
-
-class WeatherApiException(Exception):
-    def __init__(self, message):
-        super(WeatherApiException, self).__init__(message)
 
 
 def datenum2date(date_num):
@@ -122,32 +118,30 @@ def sanitize_datetime(in_date):
 
 def query_api(url, username, password, request_type="GET", timeout_seconds=300,
               headers={'Accept': 'application/octet-stream'}):
-    try:
-        if request_type.lower() == "get":
-            log_info("Calling URL: {} (username = {})".format(url, username))
-            response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
-        elif request_type.lower() == "post":
-            url_splitted = url.split("/", 4)
-            if len(url_splitted) > 4:
-                url = "/".join(url_splitted[0:4])
-                data = url_splitted[4]
-            else:
-                data = None
-
-            headers['Content-Type'] = "text/plain"
-
-            log_info("Calling URL: {} (username = {})".format(url, username))
-            response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
-                                     data=data)
+    if request_type.lower() == "get":
+        log_info("Calling URL: {} (username = {})".format(url, username))
+        response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
+    elif request_type.lower() == "post":
+        url_splitted = url.split("/", 4)
+        if len(url_splitted) > 4:
+            url = "/".join(url_splitted[0:4])
+            data = url_splitted[4]
         else:
-            raise ValueError('Unknown request_type: {}.'.format(request_type))
+            data = None
 
-        if response.status_code != requests.codes.ok:
-            raise WeatherApiException(response.text)
+        headers['Content-Type'] = "text/plain"
 
-        return response
-    except requests.ConnectionError as e:
-        raise WeatherApiException(e)
+        log_info("Calling URL: {} (username = {})".format(url, username))
+        response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
+                                 data=data)
+    else:
+        raise ValueError('Unknown request_type: {}.'.format(request_type))
+
+    if response.status_code != requests.codes.ok:
+        exc = API_EXCEPTIONS[response.status_code]
+        raise exc(response.text)
+
+    return response
 
 
 def query_user_features(username, password):
@@ -837,7 +831,7 @@ def query_init_date(startdate, enddate, interval, parameter, username, password,
     except:
         raise WeatherApiException(response.text)
 
-    try: 
+    try:
         # mark index as UTC timezone
         df.index = df.index.tz_localize("UTC")
     except TypeError:
