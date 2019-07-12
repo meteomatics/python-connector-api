@@ -3,6 +3,7 @@
 """Meteomatics Weather API Connector"""
 
 import datetime as dt
+import logging
 import itertools
 import os
 import sys
@@ -18,30 +19,13 @@ from . import rounding
 from .binary_reader import BinaryReader
 from .exceptions import API_EXCEPTIONS, WeatherApiException
 
-logdepth = 0
-
-
-def log(lvl, msg, depth=-1):
-    global logdepth
-    if depth == -1:
-        depth = logdepth
-    else:
-        logdepth = depth
-
-    now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prefix = "   " * depth
-    print (now + "| " + lvl + " |" + prefix + msg)
-    sys.stdout.flush()
-
-
-def log_info(msg, depth=-1):
-    log("INFO", msg, depth)
+_logger = logging.getLogger(__name__)
 
 
 def create_path(_file):
     _path = os.path.dirname(_file)
     if (os.path.exists(_path) == False) & (len(_path) > 0):
-        log_info("Create Path: {}".format(_path))
+        _logger.info("Create Path: {}".format(_path))
         os.makedirs(_path)
 
 
@@ -119,7 +103,7 @@ def sanitize_datetime(in_date):
 def query_api(url, username, password, request_type="GET", timeout_seconds=300,
               headers={'Accept': 'application/octet-stream'}):
     if request_type.lower() == "get":
-        log_info("Calling URL: {} (username = {})".format(url, username))
+        _logger.debug("Calling URL: {} (username = {})".format(url, username))
         response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
     elif request_type.lower() == "post":
         url_splitted = url.split("/", 4)
@@ -131,7 +115,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
 
         headers['Content-Type'] = "text/plain"
 
-        log_info("Calling URL: {} (username = {})".format(url, username))
+        _logger.debug("Calling URL: {} (username = {})".format(url, username))
         response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
                                  data=data)
     else:
@@ -795,7 +779,7 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
 
     # save to the specified filename
     with open(filename, 'wb') as f:
-        log_info('Create File {}'.format(filename))
+        _logger.info('Create File {}'.format(filename))
         for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
@@ -904,7 +888,7 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
 
     # save to the specified filename
     with open(filename, 'wb') as f:
-        log_info('Create File {}'.format(filename))
+        _logger.info('Create File {}'.format(filename))
         for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
@@ -963,7 +947,7 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
     # save to the specified filename
     create_path(filename)
     with open(filename, 'wb') as f:
-        log_info('Create File {}'.format(filename))
+        _logger.info('Create File {}'.format(filename))
         for chunk in response.iter_content(chunk_size=1024):
             f.write(chunk)
 
