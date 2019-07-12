@@ -146,7 +146,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
 
 def query_user_features(username, password):
     """Get user features"""
-    response = requests.get('http://api.meteomatics.com/user_stats_json',
+    response = requests.get(DEFAULT_API_BASE_URL+'/user_stats_json',
                             auth=(username, password)
                             )
     data = response.json()
