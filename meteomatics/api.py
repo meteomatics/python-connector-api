@@ -192,7 +192,7 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
                 value = (value,)
             dict_data[date] = value + latlon
 
-        df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=parameters_ts)
+        df = pd.DataFrame.from_dict(dict(dict_data.items()), orient="index", columns=parameters_ts)
         df = df.sort_index()
         dfs.append(df)
 
