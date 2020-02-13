@@ -529,7 +529,7 @@ def convert_grid_binary_response_to_df(input, parameter_grid):
                 values = binary_reader.get(value_data_type, num_lon)
                 dict_data[lat] = values
 
-        df = pd.DataFrame.from_items(dict_data.items(), orient="index", columns=lons)
+        df = pd.DataFrame.from_dict(dict(dict_data.items()), orient="index", columns=lons)
         df = df.replace(NA_VALUES, float('NaN'))
         df = df.sort_index(ascending=False)
 
