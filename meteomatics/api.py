@@ -1,32 +1,37 @@
 # -*- coding: utf-8 -*-
+"""Meteomatics Weather API Connector
 
-"""Meteomatics Weather API Connector"""
+Visit https://www.meteomatics.com/en/api/overview/ for an overview of the API.
+Checkout the examples!
+If necessary, you can open an issue at https://github.com/meteomatics/python-connector-api or
+write an email to support@meteomatics.com if you need further assistance.
+"""
 
 import datetime as dt
 import itertools
 import os
 import sys
 from io import StringIO
-from . import __version__
 
 import isodate
 import pandas as pd
 import pytz
 import requests
 
+import meteomatics._constants_
 from . import rounding
+from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, \
+    GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, GRADS_TEMPLATE, NETCDF_TEMPLATE, \
+    STATIONS_LIST_TEMPLATE, INIT_DATE_TEMPLATE, AVAILABLE_TIME_RANGES_TEMPLATE, NA_VALUES
 from .binary_reader import BinaryReader
 from .exceptions import API_EXCEPTIONS, WeatherApiException
 
-logdepth = 0
-
 
 def log(lvl, msg, depth=-1):
-    global logdepth
     if depth == -1:
-        depth = logdepth
+        depth = meteomatics._constants_.logdepth
     else:
-        logdepth = depth
+        meteomatics._constants_.logdepth = depth
 
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     prefix = "   " * depth
@@ -40,27 +45,9 @@ def log_info(msg, depth=-1):
 
 def create_path(_file):
     _path = os.path.dirname(_file)
-    if (os.path.exists(_path) == False) & (len(_path) > 0):
+    if not os.path.exists(_path) and len(_path) > 0:
         log_info("Create Path: {}".format(_path))
         os.makedirs(_path)
-
-
-DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
-VERSION = 'python_v{}'.format(__version__)
-
-# Templates
-TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"
-GRID_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
-GRID_TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
-GRID_PNG_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/png?{urlParams}"
-LIGHTNING_TEMPLATE = "{api_base_url}/get_lightning_list?time_range={startdate}--{enddate}&bounding_box={lat_N},{lon_W}_{lat_S},{lon_E}&format=csv"
-GRADS_TEMPLATE = "{api_base_url}/{startdate}/{parameters}/{area}/grads?model={model}&{urlParams}"
-NETCDF_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameter_netcdf}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/netcdf?{urlParams}"
-STATIONS_LIST_TEMPLATE = "{api_base_url}/find_station?{urlParams}"
-INIT_DATE_TEMPLATE = "{api_base_url}/get_init_date?model={model}&valid_date={interval_string}&parameters={parameter}"
-AVAILABLE_TIME_RANGES_TEMPLATE = "{api_base_url}/get_time_range?model={model}&parameters={parameters}"
-
-NA_VALUES = [-666, -777, -888, -999]
 
 
 def datenum2date(date_num):
@@ -87,7 +74,7 @@ def parse_ens(ens_str):
                 start, end = numbers.split('-')
                 numbers = range(int(start), int(end) + 1)
             else:
-                numbers = (int(numbers), )
+                numbers = (int(numbers),)
             for n in numbers:
                 out.append('m{}'.format(n))
         else:
@@ -146,7 +133,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
 
 def query_user_features(username, password):
     """Get user features"""
-    response = requests.get(DEFAULT_API_BASE_URL+'/user_stats_json',
+    response = requests.get(DEFAULT_API_BASE_URL + '/user_stats_json',
                             auth=(username, password)
                             )
     data = response.json()
@@ -158,8 +145,8 @@ def query_user_features(username, password):
         return {key: user_data[key] for key in limits_of_interest}
 
 
-def convert_time_series_binary_response_to_df(input, latlon_tuple_list, parameters, station=False):
-    binary_reader = BinaryReader(input)
+def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, parameters, station=False):
+    binary_reader = BinaryReader(bin_input)
 
     parameters_ts = parameters[:]
 
@@ -248,39 +235,39 @@ def convert_time_series_binary_response_to_df(input, latlon_tuple_list, paramete
 
 def query_station_list(username, password, source=None, parameters=None, startdate=None, enddate=None, location=None,
                        api_base_url=DEFAULT_API_BASE_URL, request_type='GET', elevation=None, id=None):
-    '''Function to query available stations in API
+    """Function to query available stations in API
     source as string
     parameters as list
     enddate as datetime object
     location as string (e.g. "40,10")
     request_type is one of 'GET'/'POST'
     elevation as integer/float (e.g. 1050 ; 0.5)
-    '''
-    urlParams = {}
+    """
+    url_params = dict()
     if source is not None:
-        urlParams['source'] = source
+        url_params['source'] = source
 
     if parameters is not None:
-        urlParams['parameters'] = ",".join(parameters)
+        url_params['parameters'] = ",".join(parameters)
 
     if startdate is not None:
-        urlParams['startdate'] = dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ")
+        url_params['startdate'] = dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ")
 
     if enddate is not None:
-        urlParams['enddate'] = dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ")
+        url_params['enddate'] = dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ")
 
     if location is not None:
-        urlParams['location'] = location
+        url_params['location'] = location
 
     if elevation is not None:
-        urlParams['elevation'] = elevation
+        url_params['elevation'] = elevation
 
     if id is not None:
-        urlParams['id'] = id
+        url_params['id'] = id
 
     url = STATIONS_LIST_TEMPLATE.format(
         api_base_url=api_base_url,
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     response = query_api(url, username, password, request_type=request_type)
@@ -311,8 +298,8 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     # build URL
 
     coordinate_blocks = []
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if latlon_tuple_list is not None:
         coordinate_blocks += ("+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]),)
 
@@ -334,16 +321,16 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     coordinates = '+'.join(coordinate_blocks)
 
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if on_invalid is not None:
-        urlParams['on_invalid'] = on_invalid
+        url_params['on_invalid'] = on_invalid
 
     if temporal_interpolation is not None:
-        urlParams['temporal_interpolation'] = temporal_interpolation
+        url_params['temporal_interpolation'] = temporal_interpolation
 
     if spatial_interpolation is not None:
-        urlParams['spatial_interpolation'] = spatial_interpolation
+        url_params['spatial_interpolation'] = spatial_interpolation
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -352,7 +339,7 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
         enddate=enddate.isoformat(),
         interval=isodate.duration_isoformat(interval),
         parameters=",".join(parameters),
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     headers = {'Accept': 'text/csv'}
@@ -367,7 +354,8 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
                                        on_invalid=None,
                                        api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
     """Retrieve a time series from the Meteomatics Weather API.
-    Requested locations can be soecified by Postal Codes; Input as dictionary, e.g.: postal_codes={'DE': [71679,70173], ...}.
+    Requested locations can also be specified by Postal Codes;
+        Input as dictionary, e.g.: postal_codes={'DE': [71679,70173], ...}.
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
     request_type is one of 'GET/POST'
@@ -379,23 +367,23 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
 
     # build URL
     coordinates = ""
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if postal_codes is not None:
         for country, pcs in postal_codes.items():
             coordinates += "+".join(['postal_' + country.upper() + s for s in pcs])
 
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if on_invalid is not None:
-        urlParams['on_invalid'] = on_invalid
+        url_params['on_invalid'] = on_invalid
 
     if temporal_interpolation is not None:
-        urlParams['temporal_interpolation'] = temporal_interpolation
+        url_params['temporal_interpolation'] = temporal_interpolation
 
     if spatial_interpolation is not None:
-        urlParams['spatial_interpolation'] = spatial_interpolation
+        url_params['spatial_interpolation'] = spatial_interpolation
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -404,7 +392,7 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
         enddate=enddate.isoformat(),
         interval=isodate.duration_isoformat(interval),
         parameters=",".join(parameters),
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     headers = {'Accept': 'text/csv'}
@@ -430,28 +418,29 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
 
     # build URL
 
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
+    extended_params = parameters
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
+        url_params['ens_select'] = ens_select
         ens_parameters = parse_ens(ens_select)
         extended_params = build_response_params(parameters, ens_parameters)
 
     if cluster_select is not None:
-        urlParams['cluster_select'] = cluster_select
+        url_params['cluster_select'] = cluster_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     if on_invalid is not None:
-        urlParams['on_invalid'] = on_invalid
+        url_params['on_invalid'] = on_invalid
 
     for (key, value) in kwargs.items():
-        if key not in urlParams:
-            urlParams[key] = value
+        if key not in url_params:
+            url_params[key] = value
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -460,21 +449,17 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
         enddate=enddate.isoformat(),
         interval=isodate.duration_isoformat(interval),
         parameters=",".join(parameters),
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     response = query_api(url, username, password, request_type=request_type)
-
-    if ens_select is not None:
-        df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params)
-    else:
-        df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params)
 
     return df
 
 
-def convert_grid_binary_response_to_df(input, parameter_grid):
-    binary_reader = BinaryReader(input)
+def convert_grid_binary_response_to_df(bin_input, parameter_grid):
+    binary_reader = BinaryReader(bin_input)
 
     header = binary_reader.get_string(length=4)
 
@@ -489,13 +474,13 @@ def convert_grid_binary_response_to_df(input, parameter_grid):
     forecast_dates_ux = [binary_reader.get_unsigned_long() for _ in range(num_forecasts)]
 
     # precision in bytes
-    DOUBLE = 8
-    FLOAT = 4
+    double_precision = 8
+    float_precision = 4
 
     if version != 2:
         raise WeatherApiException("Only MBG version 2 supported, this is version {}".format(version))
 
-    if precision not in [FLOAT, DOUBLE]:
+    if precision not in [float_precision, double_precision]:
         raise WeatherApiException("Received wrong precision {}".format(precision))
 
     if num_payloads_per_forecast > 100000:
@@ -511,7 +496,7 @@ def convert_grid_binary_response_to_df(input, parameter_grid):
     lons = []
     lats = []
 
-    value_data_type = "float" if precision == FLOAT else "double"
+    value_data_type = "float" if precision == float_precision else "double"
     num_lat = binary_reader.get_int()
 
     for _ in range(num_lat):
@@ -557,20 +542,20 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
     # build URL
 
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
+        url_params['ens_select'] = ens_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     for (key, value) in kwargs.items():
-        if key not in urlParams:
-            urlParams[key] = value
+        if key not in url_params:
+            url_params[key] = value
 
     url = GRID_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -582,7 +567,7 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
         lon_E=lon_E,
         res_lat=res_lat,
         res_lon=res_lon,
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     response = query_api(url, username, password, request_type=request_type)
@@ -619,7 +604,7 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
     # sort_values might not available in older pandas versions
     try:
         data.sort_values(idxcols, inplace=True)
-    except AttributeError as e:
+    except AttributeError:
         data.sort(idxcols, inplace=True)
 
     data.set_index(idxcols, inplace=True)
@@ -642,19 +627,19 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
     # build URL
 
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
+        url_params['ens_select'] = ens_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     if on_invalid is not None:
-        urlParams['on_invalid'] = on_invalid
+        url_params['on_invalid'] = on_invalid
 
     url = GRID_TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -668,7 +653,7 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
         res_lat=res_lat,
         res_lon=res_lon,
         parameters=",".join(parameters),
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     response = query_api(url, username, password, request_type=request_type)
@@ -682,21 +667,21 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
     return df
 
 
-def convert_lightning_response_to_df(input):
+def convert_lightning_response_to_df(data):
     """converts the response of the query of query_lightnings to a pandas DataFrame."""
-
+    is_str = False
     try:
-        is_str = isinstance(input, basestring)  # python 2
+        is_str = isinstance(data, basestring)  # python 2
     except NameError:
-        is_str = isinstance(input, str)  # python 3
+        is_str = isinstance(data, str)  # python 3
     finally:
         if is_str:
-            input = StringIO(input)
+            data = StringIO(data)
 
         # parse response
         try:
             df = pd.read_csv(
-                input,
+                data,
                 sep=";",
                 header=0,
                 encoding="utf-8",
@@ -710,8 +695,8 @@ def convert_lightning_response_to_df(input):
             # mark index as UTC timezone
             df.index = df.index.tz_localize("UTC")
 
-        except:
-            raise WeatherApiException(input.getvalue())
+        except Exception:
+            raise WeatherApiException(data.getvalue())
 
         # rename columns to make consistent with other csv file headers
         df = df.reset_index().rename(
@@ -761,19 +746,19 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
 
     # build URL
 
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
-        
+        url_params['ens_select'] = ens_select
+
     if cluster_select is not None:
-        urlParams['cluster_select'] = cluster_select
+        url_params['cluster_select'] = cluster_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     url = NETCDF_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -787,7 +772,7 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
         lon_E=lon_E,
         res_lat=res_lat,
         res_lon=res_lon,
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     headers = {'Accept': 'application/netcdf'}
@@ -831,7 +816,7 @@ def query_init_date(startdate, enddate, interval, parameter, username, password,
             na_values=["0000-00-00T00:00:00Z"],
             parse_dates=[0, 1]
         )
-    except:
+    except Exception:
         raise WeatherApiException(response.text)
 
     try:
@@ -860,7 +845,7 @@ def query_available_time_ranges(parameters, username, password, model, api_base_
             na_values=["0000-00-00T00:00:00Z"],
             parse_dates=['min_date', 'max_date']
         )
-    except:
+    except Exception:
         raise WeatherApiException(response.text)
 
     return df
@@ -869,7 +854,8 @@ def query_available_time_ranges(parameters, username, password, model, api_base_
 def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username,
                    password, model=None, ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL,
                    request_type='GET'):
-    """Gets a png image generated by the Meteomatics API from grid data (see method query_grid) and saves it to the specified filename.
+    """Gets a png image generated by the Meteomatics API from grid data (see method query_grid)
+    and saves it to the specified filename.
     request_type is one of 'GET'/'POST'
     """
 
@@ -878,16 +864,16 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
 
     # build URL
 
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if model is not None:
-        urlParams['model'] = model
+        url_params['model'] = model
 
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
+        url_params['ens_select'] = ens_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     url = GRID_PNG_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -899,7 +885,7 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
         lon_E=lon_E,
         res_lat=res_lat,
         res_lon=res_lon,
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     headers = {'Accept': 'image/png'}
@@ -928,8 +914,10 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
          - cloud cover (e.g. parameters = ['low_cloud_cover:p'])
          - wind speed and direction (e.g. parameters = ['wind_speed_u_100m:ms','wind_speed_v_100m:ms'])
          - wind power (e.g. parameters = ['wind_power_turbine_aaer_a1000_1000_hub_height_110m:MW'])
-         - significant wave height and mean sea level pressure (parameters = ['significant_wave_height:m','msl_pressure:hPa'], requires model='ecmwf-wam')
-         - mean wave period and mean sea level pressure (parameters = ['mean_wave_period:s','msl_pressure:hPa'] , requires model='ecmwf-wam')
+         - significant wave height and mean sea level pressure
+            (parameters = ['significant_wave_height:m','msl_pressure:hPa'], requires model='ecmwf-wam')
+         - mean wave period and mean sea level pressure
+            (parameters = ['mean_wave_period:s','msl_pressure:hPa'] , requires model='ecmwf-wam')
     request_type is one of 'GET'/'POST'
     """
 
@@ -937,13 +925,13 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
     startdate = sanitize_datetime(startdate)
 
     # build URL
-    urlParams = {}
-    urlParams['connector'] = VERSION
+    url_params = dict()
+    url_params['connector'] = VERSION
     if ens_select is not None:
-        urlParams['ens_select'] = ens_select
+        url_params['ens_select'] = ens_select
 
     if interp_select is not None:
-        urlParams['interp_select'] = interp_select
+        url_params['interp_select'] = interp_select
 
     # construct the area from latlon specifiers if area is not one of the predefined ones.
     if area is None:
@@ -957,7 +945,7 @@ def query_grads(filename, startdate, parameters, lat_N, lon_W, lat_S, lon_E, res
         parameters=",".join(parameters),
         area=area,
         model=model,
-        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+        urlParams="&".join(["{}={}".format(k, v) for k, v in url_params.items()])
     )
 
     headers = {'Accept': 'image/png'}
@@ -1017,8 +1005,10 @@ def query_grads_timeseries(prefixpath, startdate, enddate, interval, parameters,
          - cloud cover (e.g. parameters = ['low_cloud_cover:p'])
          - wind speed and direction (e.g. parameters = ['wind_speed_u_100m:ms','wind_speed_v_100m:ms'])
          - wind power (e.g. parameters = ['wind_power_turbine_aaer_a1000_1000_hub_height_110m:MW'])
-         - significant wave height and mean sea level pressure (parameters = ['significant_wave_height:m','msl_pressure:hPa'], requires model='ecmwf-wam')
-         - mean wave period and mean sea level pressure (parameters = ['mean_wave_period:s','msl_pressure:hPa'] , requires model='ecmwf-wam')
+         - significant wave height and mean sea level pressure
+            (parameters = ['significant_wave_height:m','msl_pressure:hPa'], requires model='ecmwf-wam')
+         - mean wave period and mean sea level pressure
+            (parameters = ['mean_wave_period:s','msl_pressure:hPa'] , requires model='ecmwf-wam')
     request_type is one of 'GET'/'POST'
     """
 

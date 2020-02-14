@@ -47,14 +47,17 @@ class TooManyRequests(WeatherApiException):
 class InternalServerError(WeatherApiException):
     pass
 
-_exceptions = {400: BadRequest,
-               401: Unauthorized,
-               403: Forbidden,
-               404: NotFound,
-               408: RequestTimeout,
-               413: PayloadTooLarge,
-               414: UriTooLong,
-               429: TooManyRequests,
-               500: InternalServerError}
+
+_exceptions = {
+    400: BadRequest,
+    401: Unauthorized,
+    403: Forbidden,
+    404: NotFound,
+    408: RequestTimeout,
+    413: PayloadTooLarge,
+    414: UriTooLong,
+    429: TooManyRequests,
+    500: InternalServerError
+}
 
 API_EXCEPTIONS = defaultdict(lambda: WeatherApiException, _exceptions)

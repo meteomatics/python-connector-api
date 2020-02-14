@@ -30,10 +30,11 @@ class BinaryReader(object):
     def _read_data(self, data_type, n):
         try:
             num_of_bytes = self.DATA_TYPES[data_type]["num_of_bytes"]
-        except KeyError as e:
-            raise BinaryReaderException("Data type: '{}' is not valid. Valid types: [{}]".format(data_type,
-                                                                                                 ", ".join(
-                                                                                                     self.DATA_TYPES.keys())))
+        except KeyError:
+            raise BinaryReaderException("Data type: '{}' is not valid. Valid types: [{}]".format(
+                data_type,
+                ", ".join(
+                    self.DATA_TYPES.keys())))
 
         substring = self._binary_data[self._pointer:self._pointer + num_of_bytes * n]
 
