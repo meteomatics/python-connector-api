@@ -52,6 +52,7 @@ VERSION = 'python_v{}'.format(__version__)
 TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"
 GRID_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
 GRID_TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/bin?{urlParams}"
+POLYGON_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}:{aggregation}/csv?{urlParams}"
 GRID_PNG_TEMPLATE = "{api_base_url}/{startdate}/{parameter_grid}/{lat_N},{lon_W}_{lat_S},{lon_E}:{res_lat},{res_lon}/png?{urlParams}"
 LIGHTNING_TEMPLATE = "{api_base_url}/get_lightning_list?time_range={startdate}--{enddate}&bounding_box={lat_N},{lon_W}_{lat_S},{lon_E}&format=csv"
 GRADS_TEMPLATE = "{api_base_url}/{startdate}/{parameters}/{area}/grads?model={model}&{urlParams}"
@@ -678,6 +679,75 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
     latlon_tuple_list = list(itertools.product(lats, lons))
     df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+
+    return df
+
+def parse_polygon_csv(csv):
+    return pd.read_csv(StringIO(csv), sep=";", header=0, encoding="utf-8", parse_dates=['validdate'],
+                       index_col='validdate')
+
+
+def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, aggregation, username,
+                  password, operator=None, model=None, ens_select=None, interp_select=None, on_invalid=None,
+                  api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None, **kwargs):
+    """Retrieve a time series from the Meteomatics Weather API for a selected polygon.
+    Start and End dates have to be in UTC.
+    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
+    request_type is one of 'GET'/'POST'
+    """
+
+    # set time zone info to UTC if necessary
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
+
+    # build URL
+    urlParams = dict()
+    urlParams['connector'] = VERSION
+    if model is not None:
+        urlParams['model'] = model
+
+    if ens_select is not None:
+        urlParams['ens_select'] = ens_select
+        ens_parameters = parse_ens(ens_select)
+        extended_params = build_response_params(parameters, ens_parameters)
+
+    if cluster_select is not None:
+        urlParams['cluster_select'] = cluster_select
+
+    if interp_select is not None:
+        urlParams['interp_select'] = interp_select
+
+    if on_invalid is not None:
+        urlParams['on_invalid'] = on_invalid
+
+    for (key, value) in kwargs.items():
+        if key not in urlParams:
+            urlParams[key] = value
+
+    coordinates_polygon_list = []
+    for latlon_tuple_list in latlon_tuple_lists:
+        coordinates_polygon = "_".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list])
+        coordinates_polygon_list.append(coordinates_polygon)
+
+    if len(coordinates_polygon_list) > 1:
+        coordinates = operator.join(coordinates_polygon_list)
+    else:
+        coordinates = coordinates_polygon_list
+
+    url = POLYGON_TEMPLATE.format(
+        api_base_url=api_base_url,
+        coordinates=coordinates,
+        aggregation=aggregation,
+        startdate=startdate.isoformat(),
+        enddate=enddate.isoformat(),
+        interval=isodate.duration_isoformat(interval),
+        parameters=",".join(parameters),
+        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+    )
+
+    response = query_api(url, username, password, request_type=request_type)
+
+    df = parse_polygon_csv(response.text)
 
     return df
 
