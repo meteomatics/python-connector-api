@@ -18,7 +18,7 @@ import pandas as pd
 import pytz
 import requests
 
-import meteomatics._constants_
+from . import _constants_
 from . import rounding
 from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, GRADS_TEMPLATE, NETCDF_TEMPLATE, \
@@ -29,9 +29,9 @@ from .exceptions import API_EXCEPTIONS, WeatherApiException
 
 def log(lvl, msg, depth=-1):
     if depth == -1:
-        depth = meteomatics._constants_.logdepth
+        depth = _constants_.logdepth
     else:
-        meteomatics._constants_.logdepth = depth
+        _constants_.logdepth = depth
 
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     prefix = "   " * depth
@@ -50,16 +50,19 @@ def create_path(_file):
         os.makedirs(_path)
 
 
-def datenum2date(date_num):
-    if pd.isnull(date_num):
-        return pd.NaT
-    else:
+def datenum_to_date(date_num):
+    """Transform date_num to datetime object.
+
+    Returns pd.NaT on invalid input"""
+    try:
         total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
         return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
+    except OverflowError:
+        return pd.NaT
 
 
 def parse_date_num(s):
-    dates = {date: datenum2date(date) for date in s.unique()}
+    dates = {date: datenum_to_date(date) for date in s.unique()}
     return s.map(dates)
 
 
