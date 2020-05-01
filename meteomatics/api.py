@@ -63,7 +63,10 @@ AVAILABLE_TIME_RANGES_TEMPLATE = "{api_base_url}/get_time_range?model={model}&pa
 NA_VALUES = [-666, -777, -888, -999]
 
 
-def datenum2date(date_num):
+def datenum_to_date(date_num):
+    """Transform date_num to datetime object.
+
+    Returns pd.NaT on invalid input"""
     try:
         total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
         return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
@@ -72,7 +75,7 @@ def datenum2date(date_num):
 
 
 def parse_date_num(s):
-    dates = {date: datenum2date(date) for date in s.unique()}
+    dates = {date: datenum_to_date(date) for date in s.unique()}
     return s.map(dates)
 
 
