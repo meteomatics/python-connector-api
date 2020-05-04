@@ -3,7 +3,7 @@
 """
 Collect all constant definitions here
 """
-from meteomatics import __version__
+from . import __version__
 
 DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
 
