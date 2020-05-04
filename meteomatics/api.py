@@ -20,7 +20,7 @@ import requests
 
 from . import _constants_
 from . import rounding
-from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, \
+from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, POLYGON_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, GRADS_TEMPLATE, NETCDF_TEMPLATE, \
     STATIONS_LIST_TEMPLATE, INIT_DATE_TEMPLATE, AVAILABLE_TIME_RANGES_TEMPLATE, NA_VALUES
 from .binary_reader import BinaryReader
@@ -666,6 +666,85 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
     latlon_tuple_list = list(itertools.product(lats, lons))
     df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+
+    return df
+
+
+def convert_polygon_response_to_df(csv):
+    # Example for header of CSV: 'validdate;t_2m:C,precip_1h:mm'
+    return pd.read_csv(StringIO(csv), sep=";", header=0, encoding="utf-8", parse_dates=['validdate'],
+                       index_col='validdate')
+
+
+def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, aggregation, username,
+                  password, operator=None, model=None, ens_select=None, interp_select=None, on_invalid=None,
+                  api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None, **kwargs):
+    """Retrieve a time series from the Meteomatics Weather API for a selected polygon.
+    Start and End dates have to be in UTC.
+    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
+    request_type is one of 'GET'/'POST'
+
+    Polygons have to be supplied in lists containing lat/lon tuples. For example, input of 2 polygons:
+    [[(45.1, 8.2), (45.2, 8.0), (46.2, 7.5)], [(55.1, 8.2), (55.2, 8.0), (56.2, 7.5)]]
+    If more than 1 polygon is supplied, then the operator key has to be defined!
+
+    The aggregation parameter can be chosen from: mean, max, min, median, mode. Input format is a string.
+
+    The operator can be either D (difference) or U (union). Input format is a string.
+    """
+
+    # set time zone info to UTC if necessary
+    startdate = sanitize_datetime(startdate)
+    enddate = sanitize_datetime(enddate)
+
+    # build URL
+    urlParams = dict()
+    urlParams['connector'] = VERSION
+    if model is not None:
+        urlParams['model'] = model
+
+    if ens_select is not None:
+        urlParams['ens_select'] = ens_select
+        ens_parameters = parse_ens(ens_select)
+        extended_params = build_response_params(parameters, ens_parameters)
+
+    if cluster_select is not None:
+        urlParams['cluster_select'] = cluster_select
+
+    if interp_select is not None:
+        urlParams['interp_select'] = interp_select
+
+    if on_invalid is not None:
+        urlParams['on_invalid'] = on_invalid
+
+    for (key, value) in kwargs.items():
+        if key not in urlParams:
+            urlParams[key] = value
+
+    coordinates_polygon_list = []
+    for latlon_tuple_list in latlon_tuple_lists:
+        coordinates_polygon = "_".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list])
+        coordinates_polygon_list.append(coordinates_polygon)
+
+    if len(coordinates_polygon_list) > 1:
+        coordinates = operator.join(coordinates_polygon_list)
+    else:
+        coordinates = coordinates_polygon_list
+
+    url = POLYGON_TEMPLATE.format(
+        api_base_url=api_base_url,
+        coordinates=coordinates,
+        aggregation=aggregation,
+        startdate=startdate.isoformat(),
+        enddate=enddate.isoformat(),
+        interval=isodate.duration_isoformat(interval),
+        parameters=",".join(parameters),
+        urlParams="&".join(["{}={}".format(k, v) for k, v in urlParams.items()])
+    )
+
+    response = query_api(url, username, password, request_type=request_type)
+
+    df = convert_polygon_response_to_df(response.text)
 
     return df
 
