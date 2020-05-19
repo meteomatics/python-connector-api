@@ -671,9 +671,13 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
 
 def convert_polygon_response_to_df(csv):
-    # Example for header of CSV: 'validdate;t_2m:C,precip_1h:mm'
-    return pd.read_csv(StringIO(csv), sep=";", header=0, encoding="utf-8", parse_dates=['validdate'],
-                       index_col='validdate')
+    # Example for header of CSV (single polygon, polygon united or polygon difference): 'validdate;t_2m:C,precip_1h:mm'
+    # Example for header of CSV (multiple polygon): 'station_id, validdate;t_2m:C,precip_1h:mm'
+    df = pd.read_csv(StringIO(csv), sep=";", header=0, encoding="utf-8", parse_dates=['validdate'])
+    if 'station_id' not in df.columns:
+        df['station_id'] = 'polygon1'
+    df.set_index(['station_id', 'validdate'], inplace=True)
+    return df
 
 
 def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, aggregation, username,
@@ -688,7 +692,9 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
     [[(45.1, 8.2), (45.2, 8.0), (46.2, 7.5)], [(55.1, 8.2), (55.2, 8.0), (56.2, 7.5)]]
     If more than 1 polygon is supplied, then the operator key has to be defined!
 
-    The aggregation parameter can be chosen from: mean, max, min, median, mode. Input format is a string.
+    The aggregation parameter can be chosen from: mean, max, min, median, mode. Input format is a list of strings.
+    In case of multiple polygons with different aggregators the number of aggregators and polygons must match
+    and the operator has to be set to None!
 
     The operator can be either D (difference) or U (union). Input format is a string.
     """
@@ -727,14 +733,22 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
         coordinates_polygon_list.append(coordinates_polygon)
 
     if len(coordinates_polygon_list) > 1:
-        coordinates = operator.join(coordinates_polygon_list)
+        if operator is not None:
+            coordinates = operator.join(coordinates_polygon_list)
+            coordinates = coordinates + ':' + aggregation[0]
+        else:
+            coordinates_polygon_list_aggregator_included = []
+            for i, coordinates_polygon in enumerate(coordinates_polygon_list):
+                coordinates_polygon = coordinates_polygon + ':' + aggregation[i]
+                coordinates_polygon_list_aggregator_included.append(coordinates_polygon)
+            coordinates = '+'.join(coordinates_polygon_list_aggregator_included)
+
     else:
-        coordinates = coordinates_polygon_list
+        coordinates = coordinates_polygon_list[0] + ':' + aggregation[0]
 
     url = POLYGON_TEMPLATE.format(
         api_base_url=api_base_url,
-        coordinates=coordinates,
-        aggregation=aggregation,
+        coordinates_aggregation=coordinates,
         startdate=startdate.isoformat(),
         enddate=enddate.isoformat(),
         interval=isodate.duration_isoformat(interval),
