@@ -6,6 +6,7 @@ decimal_places = {
     "C":        1,  # temperature
     "d":       -1,  # days AND degrees...
     "dn":       5,  # datenums
+    "eur":      1,  # euro
     "F":        1,  # temperature
     "ft":       1,  # feet (ceiling height)
     "gcm2":     4,  # total column air pollution
