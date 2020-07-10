@@ -293,6 +293,9 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
     request_type is one of 'GET/POST'
+    na_values: list of special Values that get converted to NaN.
+        Default = [-666, -777, -888, -999]
+        See also https://www.meteomatics.com/en/api/response/#reservedvalues
     """
 
     # set time zone info to UTC if necessary
@@ -364,6 +367,9 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
     request_type is one of 'GET/POST'
+    na_values: list of special Values that get converted to NaN.
+        Default = [-666, -777, -888, -999]
+        See also https://www.meteomatics.com/en/api/response/#reservedvalues
     """
 
     # set time zone info to UTC if necessary
@@ -416,6 +422,9 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     Start and End dates have to be in UTC.
     Returns a Pandas `DataFrame` with a `DateTimeIndex`.
     request_type is one of 'GET'/'POST'
+    na_values: list of special Values that get converted to NaN.
+        Default = [-666, -777, -888, -999]
+        See also https://www.meteomatics.com/en/api/response/#reservedvalues
     """
 
     # set time zone info to UTC if necessary
@@ -584,7 +593,7 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
 
 def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
-                         model=None, ens_select=None, interp_select=None, request_type='GET'):
+                         model=None, ens_select=None, interp_select=None, request_type='GET', na_values=NA_VALUES):
     idxcols = ['valid_date', 'lat', 'lon']
     vd_dfs = []
 
@@ -593,7 +602,7 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
         for parameter in parameters:
 
             dmo = query_grid(valid_date, parameter, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
-                             model, ens_select, interp_select, request_type=request_type)
+                             model, ens_select, interp_select, request_type=request_type, na_values=na_values)
 
             df = pd.melt(dmo.reset_index(), id_vars='lat', var_name='lon', value_name=parameter)
             df['valid_date'] = valid_date
@@ -627,6 +636,9 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
        Start and End dates have to be in UTC.
        Returns a Pandas `DataFrame` with a `DateTimeIndex`.
        request_type is one of 'GET'/'POST'
+       na_values: list of special Values that get converted to NaN.
+        Default = [-666, -777, -888, -999]
+        See also https://www.meteomatics.com/en/api/response/#reservedvalues
        """
 
     # set time zone info to UTC if necessary
