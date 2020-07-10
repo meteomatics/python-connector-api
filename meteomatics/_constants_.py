@@ -9,7 +9,7 @@ DEFAULT_API_BASE_URL = "https://api.meteomatics.com"
 
 VERSION = 'python_v{}'.format(__version__)
 
-NA_VALUES = [-666, -777, -888, -999]
+NA_VALUES = (-666, -777, -888, -999)
 
 # templates
 TIME_SERIES_TEMPLATE = "{api_base_url}/{startdate}--{enddate}:{interval}/{parameters}/{coordinates}/bin?{urlParams}"

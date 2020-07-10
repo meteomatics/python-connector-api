@@ -35,7 +35,7 @@ def log(lvl, msg, depth=-1):
 
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     prefix = "   " * depth
-    print (now + "| " + lvl + " |" + prefix + msg)
+    print(now + "| " + lvl + " |" + prefix + msg)
     sys.stdout.flush()
 
 
@@ -148,7 +148,8 @@ def query_user_features(username, password):
         return {key: user_data[key] for key in limits_of_interest}
 
 
-def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, parameters, station=False):
+def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, parameters, station=False,
+                                              na_values=NA_VALUES):
     binary_reader = BinaryReader(bin_input)
 
     parameters_ts = parameters[:]
@@ -187,7 +188,7 @@ def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, para
         dfs.append(df)
 
     df = pd.concat(dfs)
-    df = df.replace(NA_VALUES, float('NaN'))
+    df = df.replace(na_values, float('NaN'))
     df.index.name = "validdate"
 
     df.index = parse_date_num(df.reset_index()["validdate"])
@@ -286,7 +287,7 @@ def query_station_list(username, password, source=None, parameters=None, startda
 def query_station_timeseries(startdate, enddate, interval, parameters, username, password, model='mix-obs',
                              latlon_tuple_list=None, wmo_ids=None, mch_ids=None, general_ids=None, hash_ids=None,
                              metar_ids=None, temporal_interpolation=None, spatial_interpolation=None, on_invalid=None,
-                             api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                             api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES):
     """Retrieve a time series from the Meteomatics Weather API.
     Requested can be by WMO ID, Metar ID or coordinates.
     Start and End dates have to be in UTC.
@@ -349,13 +350,14 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
     response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     coordinates_list = coordinates.split("+")
-    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters, station=True)
+    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters,
+                                                     station=True, na_values=na_values)
 
 
 def query_special_locations_timeseries(startdate, enddate, interval, parameters, username, password, model='mix',
                                        postal_codes=None, temporal_interpolation=None, spatial_interpolation=None,
-                                       on_invalid=None,
-                                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                                       on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
+                                       na_values=NA_VALUES):
     """Retrieve a time series from the Meteomatics Weather API.
     Requested locations can also be specified by Postal Codes;
         Input as dictionary, e.g.: postal_codes={'DE': [71679,70173], ...}.
@@ -402,12 +404,13 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
     response = query_api(url, username, password, request_type=request_type, headers=headers)
 
     coordinates_list = coordinates.split("+")
-    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters, station=True)
+    return convert_time_series_binary_response_to_df(response.content, coordinates_list, parameters, station=True,
+                                                     na_values=na_values)
 
 
 def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameters, username, password, model=None,
-                      ens_select=None, interp_select=None, on_invalid=None,
-                      api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None,
+                      ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL,
+                      request_type='GET', cluster_select=None, na_values=NA_VALUES,
                       **kwargs):
     """Retrieve a time series from the Meteomatics Weather API.
     Start and End dates have to be in UTC.
@@ -456,12 +459,13 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     )
 
     response = query_api(url, username, password, request_type=request_type)
-    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params)
+    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params,
+                                                   na_values=na_values)
 
     return df
 
 
-def convert_grid_binary_response_to_df(bin_input, parameter_grid):
+def convert_grid_binary_response_to_df(bin_input, parameter_grid, na_values=NA_VALUES):
     binary_reader = BinaryReader(bin_input)
 
     header = binary_reader.get_string(length=4)
@@ -518,7 +522,7 @@ def convert_grid_binary_response_to_df(bin_input, parameter_grid):
                 dict_data[lat] = values
 
         df = pd.DataFrame.from_dict(dict_data, orient="index", columns=lons)
-        df = df.replace(NA_VALUES, float('NaN'))
+        df = df.replace(na_values, float('NaN'))
         df = df.sort_index(ascending=False)
 
         df.index.name = 'lat'
@@ -539,6 +543,7 @@ def convert_grid_binary_response_to_df(bin_input, parameter_grid):
 
 def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password, model=None,
                ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
+               na_values=NA_VALUES,
                **kwargs):
     # interpret time as UTC
     startdate = sanitize_datetime(startdate)
@@ -575,7 +580,7 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
     response = query_api(url, username, password, request_type=request_type)
 
-    return convert_grid_binary_response_to_df(response.content, parameter_grid)
+    return convert_grid_binary_response_to_df(response.content, parameter_grid, na_values=na_values)
 
 
 def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
@@ -617,7 +622,7 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
 
 def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W, lat_S, lon_E,
                           res_lat, res_lon, username, password, model=None, ens_select=None, interp_select=None,
-                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES):
     """Retrieve a grid time series from the Meteomatics Weather API.
        Start and End dates have to be in UTC.
        Returns a Pandas `DataFrame` with a `DateTimeIndex`.
@@ -665,7 +670,7 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
     lons = arange(lon_W, lon_E, res_lon)
 
     latlon_tuple_list = list(itertools.product(lats, lons))
-    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters)
+    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, parameters, na_values=na_values)
 
     return df
 
