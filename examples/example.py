@@ -7,6 +7,7 @@ import datetime as dt
 import sys
 
 import meteomatics.api as api
+from meteomatics.logger import create_log_handler
 
 '''
     For further information on available parameters, models etc. please visit
@@ -277,4 +278,5 @@ if __name__ == "__main__":
         "You need to provide a username and a password, either on the command line or by inserting them in the script")
         sys.exit()
 
+    create_log_handler()
     example()
