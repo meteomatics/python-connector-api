@@ -27,7 +27,7 @@ from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GR
 from .binary_reader import BinaryReader
 from .exceptions import API_EXCEPTIONS, WeatherApiException
 
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger("meteomatics")
 
 
 def create_path(_file):
