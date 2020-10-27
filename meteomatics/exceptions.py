@@ -4,8 +4,7 @@ from collections import defaultdict
 
 
 class WeatherApiException(Exception):
-    def __init__(self, message):
-        super(WeatherApiException, self).__init__(message)
+    pass
 
 
 class BadRequest(WeatherApiException):
