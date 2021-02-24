@@ -148,21 +148,28 @@ def query_user_features(username, password):
         return {key: user_data[key] for key in limits_of_interest}
 
 
-def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, parameters, station=False,
+def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parameters, station=False,
                                               na_values=NA_VALUES):
     binary_reader = BinaryReader(bin_input)
 
     parameters_ts = parameters[:]
+    postal = False
+    try:
+        postal = all([coord.startswith('postal_') for coord in coordinate_list])
+    except:
+        pass
 
     if station:
         # add station_id in the list of parameters
         parameters_ts.extend(["station_id"])
+    elif postal:
+        parameters_ts.extend(["postal_code"])
     else:
         # add lat, lon in the list of parameters
         parameters_ts.extend(["lat", "lon"])
     dfs = []
     # parse response
-    num_of_coords = binary_reader.get_int() if len(latlon_tuple_list) > 1 else 1
+    num_of_coords = binary_reader.get_int() if len(coordinate_list) > 1 else 1
 
     for i in range(num_of_coords):
         dict_data = {}
@@ -171,10 +178,10 @@ def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, para
         for _ in range(num_of_dates):
             num_of_params = binary_reader.get_int()
             date = binary_reader.get_double()
-            if station:
-                latlon = [latlon_tuple_list[i]]
+            if station or postal:
+                latlon = [coordinate_list[i]]
             else:
-                latlon = latlon_tuple_list[i]
+                latlon = coordinate_list[i]
             # ensure tuple
             latlon = tuple(latlon)
 
@@ -201,7 +208,7 @@ def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, para
         if parameter.endswith(":sql"):
             df[parameter] = parse_date_num(df[parameter])
 
-    if not station:
+    if not station and not postal:
         parameters_ts = [c for c in df.columns if c not in ['lat', 'lon']]
 
         # extract coordinates
@@ -212,26 +219,30 @@ def convert_time_series_binary_response_to_df(bin_input, latlon_tuple_list, para
                 df.drop('station_id', axis=1, inplace=True)
                 parameters_ts.remove('station_id')
             else:
-                df['lat'] = latlon_tuple_list[0][0]
-                df['lon'] = latlon_tuple_list[0][1]
+                df['lat'] = coordinate_list[0][0]
+                df['lon'] = coordinate_list[0][1]
 
         # replace lat lon with inital coordinates
-        split_point = len(df) / len(latlon_tuple_list)
+        split_point = len(df) / len(coordinate_list)
         df.reset_index(inplace=True)
-        for i in range(len(latlon_tuple_list)):
-            df.loc[i * split_point: (i + 1) * split_point, 'lat'] = latlon_tuple_list[i][0]
-            df.loc[i * split_point: (i + 1) * split_point, 'lon'] = latlon_tuple_list[i][1]
+        for i in range(len(coordinate_list)):
+            df.loc[i * split_point: (i + 1) * split_point, 'lat'] = coordinate_list[i][0]
+            df.loc[i * split_point: (i + 1) * split_point, 'lon'] = coordinate_list[i][1]
         # set multiindex
         df = df.set_index(['lat', 'lon', 'validdate'])
     else:
-        parameters_ts = [c for c in df.columns if c not in ['station_id']]
-        split_point = len(df) / len(latlon_tuple_list)
-        if 'station_id' not in df.columns:
-            for i in range(len(latlon_tuple_list)):
-                df.loc[int(i * split_point): int((i + 1) * split_point), 'station_id'] = latlon_tuple_list[i]
+        if station:
+            col_name = 'station_id'
+        else:
+            col_name = 'postal_code'
+        parameters_ts = [c for c in df.columns if c not in [col_name]]
+        split_point = len(df) / len(coordinate_list)
+        if col_name not in df.columns:
+            for i in range(len(coordinate_list)):
+                df.loc[int(i * split_point): int((i + 1) * split_point), col_name] = coordinate_list[i]
 
         # set multiindex
-        df = df.reset_index().set_index(['station_id', 'validdate'])
+        df = df.reset_index().set_index([col_name, 'validdate'])
         df = df.sort_index()
     df = rounding.round_df(df)
     return df[parameters_ts]
@@ -414,7 +425,7 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
                                                      na_values=na_values)
 
 
-def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameters, username, password, model=None,
+def query_time_series(coordinate_list, startdate, enddate, interval, parameters, username, password, model=None,
                       ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL,
                       request_type='GET', cluster_select=None, na_values=NA_VALUES,
                       **kwargs):
@@ -456,10 +467,21 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     for (key, value) in kwargs.items():
         if key not in url_params:
             url_params[key] = value
+    # Are coordinates lat/lon pairs or postal codes?
+    # (Reformat lat/lon pairs to strings as-needed)
+    is_latlon = True
+    try:
+        is_latlon = not all([coord.startswith('postal_') for coord in coordinate_list])
+    except:
+        pass
+    if is_latlon:
+        coordinate_list_str = "+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in coordinate_list])
+    else:
+        coordinate_list_str = "+".join(coordinate_list)
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
-        coordinates="+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]),
+        coordinates=coordinate_list_str,
         startdate=startdate.isoformat(),
         enddate=enddate.isoformat(),
         interval=isodate.duration_isoformat(interval),
@@ -468,7 +490,7 @@ def query_time_series(latlon_tuple_list, startdate, enddate, interval, parameter
     )
 
     response = query_api(url, username, password, request_type=request_type)
-    df = convert_time_series_binary_response_to_df(response.content, latlon_tuple_list, extended_params,
+    df = convert_time_series_binary_response_to_df(response.content, coordinate_list, extended_params,
                                                    na_values=na_values)
 
     return df
