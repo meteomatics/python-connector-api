@@ -17,7 +17,9 @@ VERSION = None
 REQUIRED = [
     "isodate>=0.6.0",
     "requests>=2.21.0",
-    "pandas>=0.18.1", 'pytz'
+    "pandas>=0.18.1",
+    "pathlib2>=2.3.5",
+    'pytz'
 ]
 
 here = os.path.abspath(os.path.dirname(__file__))

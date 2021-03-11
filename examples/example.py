@@ -4,9 +4,12 @@
 
 import argparse
 import datetime as dt
+import logging
 import sys
 
 import meteomatics.api as api
+from meteomatics.logger import create_log_handler
+from meteomatics._constants_ import LOGGERNAME
 
 '''
     For further information on available parameters, models etc. please visit
@@ -23,6 +26,8 @@ password = 'Umivipawe179'
 
 
 def example():
+    _logger = logging.getLogger(LOGGERNAME)
+
     ###Input timeseries:
     now = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     startdate_ts = now
@@ -54,19 +59,12 @@ def example():
     parameter_png = 't_2m:C'
 
     ###input lightning
-    startdate_l = dt.datetime(2017, 8, 6, 00, 00, 00)
-    enddate_l = dt.datetime(2017, 8, 6, 00, 20, 00)
-    lat_N_l = 50
-    lon_W_l = 10
-    lat_S_l = 40
-    lon_E_l = 20
-
-    ###input grads
-    filename_grads = "path_grads/grads_target.png"
-    startdate_grads = now
-    parameters_grads = ['wind_speed_u_100m:ms', 'wind_speed_v_100m:ms']  # ['t_500hPa:C','gh_500hPa:m']
-    model_grads = 'ecmwf-ifs'
-    area_grads = 'europe'
+    startdate_l = dt.datetime.utcnow() - dt.timedelta(days=1)
+    enddate_l = dt.datetime.utcnow() - dt.timedelta(minutes=5)
+    lat_N_l = 90
+    lon_W_l = -180
+    lat_S_l = -90
+    lon_E_l = 180
 
     ###input netcdf
     filename_nc = "path_netcdf/netcdf_target.nc"
@@ -83,19 +81,9 @@ def example():
     interval_png_ts = dt.timedelta(hours=12)
     parameter_png_ts = 't_2m:C'
 
-    ###input grads timeseries
-    # prefixpath_grads_ts = 'path/to/directory' #TODO
-    prefixpath_grads_ts = ''  # TODO
-    startdate_grads_ts = now
-    enddate_grads_ts = startdate_grads_ts + dt.timedelta(days=2)
-    interval_grads_ts = dt.timedelta(hours=24)
-    parameters_grads_ts = ['t_500hPa:C', 'gh_500hPa:m']
-    model_grads_ts = 'ecmwf-ifs'
-    area_grads_ts = 'australia'  # For Lat/Lon setting: None
-
     ###input station data timeseries
-    startdate_station_ts = startdate_grads_ts - dt.timedelta(days=2)
-    enddate_station_ts = startdate_grads_ts - dt.timedelta(hours=3)
+    startdate_station_ts = now - dt.timedelta(days=2)
+    enddate_station_ts = now - dt.timedelta(hours=3)
     interval_station_ts = dt.timedelta(hours=1)
     parameters_station_ts = ['t_2m:C', 'wind_speed_10m:ms', 'precip_1h:mm']
     model_station_ts = 'mix-obs'
@@ -106,57 +94,57 @@ def example():
 
     limits = api.query_user_features(username, password)
 
-    print("\ntime series:")
+    _logger.info("\ntime series:")
     try:
         df_ts = api.query_time_series(coordinates_ts, startdate_ts, enddate_ts, interval_ts, parameters_ts,
                                       username, password, model, ens_select, interp_select,
                                       cluster_select=cluster_select)
-        print (df_ts.head())
+        _logger.info("Dataframe head \n" + df_ts.head().to_string())
     except Exception as e:
-        print("Failed, the exception is {}".format(e))
+        _logger.info("Failed, the exception is {}".format(e))
 
-    print("\npng timeseries:")
+    _logger.info("\npng timeseries:")
     try:
         api.query_png_timeseries(prefixpath_png_ts, startdate_png_ts, enddate_png_ts, interval_png_ts, parameter_png_ts,
                                  lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password)
     except Exception as e:
-        print("Failed, the exception is {}".format(e))
+        _logger.error("Failed, the exception is {}".format(e))
 
     if limits['area request option']:
-        print("\ngrid:")
+        _logger.info("\ngrid:")
         try:
             df_grid = api.query_grid(startdate_grid, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon,
                                      username, password)
-            print (df_grid.head())
+            _logger.info ("Dataframe head \n" + df_grid.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nunpivoted grid:")
+        _logger.info("\nunpivoted grid:")
         try:
             df_grid_unpivoted = api.query_grid_unpivoted(valid_dates_unpiv, parameters_grid_unpiv, lat_N, lon_W, lat_S,
                                                          lon_E, res_lat, res_lon, username, password)
-            print (df_grid_unpivoted.head())
+            _logger.info ("Dataframe head \n" + df_grid_unpivoted.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\ngrid timeseries:")
+        _logger.info("\ngrid timeseries:")
         try:
             df_grid_timeseries = api.query_grid_timeseries(startdate_ts, enddate_ts, interval_ts, parameters_ts, lat_N,
                                                            lon_W, lat_S, lon_E, res_lat, res_lon, username, password)
-            print (df_grid_timeseries.head())
+            _logger.info ("Dataframe head \n" + df_grid_timeseries.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\ngrid as a png:")
+        _logger.info("\ngrid as a png:")
         try:
             api.query_grid_png(filename_png, startdate_png, parameter_png, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon,
                                username, password)
-            print("filename = {}".format(filename_png))
+            _logger.info("filename = {}".format(filename_png))
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
     else:
-        print("""
+        _logger.error("""
 Your account '{}' does not include area requests.
 With the corresponding upgrade you could query whole grids of data at once or even time series of grids.
 Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com for an individual offer.
@@ -164,57 +152,39 @@ Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com f
               )
 
     if limits['historic request option'] and limits['area request option']:
-        print("\nlighning strokes as csv:")
+        _logger.info("\nlighning strokes as csv:")
         try:
             df_lightning = api.query_lightnings(startdate_l, enddate_l, lat_N_l, lon_W_l, lat_S_l, lon_E_l, username,
                                                 password)
-            print(df_lightning.head())
+            _logger.info("Dataframe head \n" + df_lightning.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
     else:
-        print("""
+        _logger.error("""
 Your account '{}' does not include historic requests.
 With the corresponding upgrade you could query data from the past as well as forecasts.
 Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com for an individual offer.
 """.format(username)
               )
     if limits['model select option']:
-        print("\nnetCDF file:")
+        _logger.info("\nnetCDF file:")
         try:
             api.query_netcdf(filename_nc, startdate_nc, enddate_nc, interval_nc, parameter_nc, lat_N, lon_W, lat_S,
                              lon_E,
                              res_lat, res_lon, username, password)
-            print("filename = {}".format(filename_nc))
+            _logger.info("filename = {}".format(filename_nc))
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nGrads plot:")
-        try:
-            api.query_grads(filename_grads, startdate_grads, parameters_grads, lat_N, lon_W, lat_S, lon_E, res_lat,
-                            res_lon,
-                            username, password, model_grads, area=area_grads)
-            print("filename = {}".format(filename_grads))
-        except Exception as e:
-            print("Failed, the exception is {}".format(e))
-
-        print("\ngrads timeseries:")
-        try:
-            api.query_grads_timeseries(prefixpath_grads_ts, startdate_grads_ts, enddate_grads_ts, interval_grads_ts,
-                                       parameters_grads_ts, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username,
-                                       password, model=model_grads_ts, area=area_grads_ts)
-            print("prefix = {}".format(prefixpath_grads_ts))
-        except Exception as e:
-            print("Failed, the exception is {}".format(e))
-
-        print("\nfind stations:")
+        _logger.info("\nfind stations:")
         try:
             met = api.query_station_list(username, password, startdate=startdate_station_ts, enddate=enddate_station_ts,
                                          parameters=parameters_station_ts)
-            print(met.head())
+            _logger.info("Dataframe head \n" +  met.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nstation coordinates timeseries:")
+        _logger.info("\nstation coordinates timeseries:")
         try:
             df_sd_coord = api.query_station_timeseries(startdate_station_ts, enddate_station_ts, interval_station_ts,
                                                        parameters_station_ts, username, password,
@@ -222,42 +192,42 @@ Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com f
                                                        latlon_tuple_list=coordinates_station_ts,
                                                        on_invalid='fill_with_invalid', request_type="POST",
                                                        temporal_interpolation='none')
-            print(df_sd_coord.head())
+            _logger.info("Dataframe head \n" + df_sd_coord.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nstation wmo + metar ids timeseries:")
+        _logger.info("\nstation wmo + metar ids timeseries:")
         try:
             df_sd_ids = api.query_station_timeseries(startdate_station_ts, enddate_station_ts, interval_station_ts,
                                                      parameters_station_ts, username, password, model=model_station_ts,
                                                      wmo_ids=wmo_stations, metar_ids=metar_stations,
                                                      mch_ids=mch_stations, on_invalid='fill_with_invalid',
                                                      request_type="POST", temporal_interpolation='none')
-            print(df_sd_ids.head())
+            _logger.info("Dataframe head \n" + df_sd_ids.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nget init dates:")
+        _logger.info("\nget init dates:")
         try:
             df_init_dates = api.query_init_date(now, now + dt.timedelta(days=2), dt.timedelta(hours=3), 't_2m:C',
                                                 username,
                                                 password, 'ecmwf-ens')
-            print(df_init_dates.head())
+            _logger.info("Dataframe head \n" + df_init_dates.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
-        print("\nget available time ranges:")
+        _logger.info("\nget available time ranges:")
         try:
             df_time_ranges = api.query_available_time_ranges(['t_2m:C', 'precip_6h:mm'], username, password,
                                                              'ukmo-euro4')
-            print(df_time_ranges.head())
+            _logger.info("Dataframe head \n" + df_time_ranges.head().to_string())
         except Exception as e:
-            print("Failed, the exception is {}".format(e))
+            _logger.error("Failed, the exception is {}".format(e))
 
     else:
-        print("""
+        _logger.error("""
 Your account '{}' does not include model selection.
-With the corresponding upgrade you could query data from stations and request your data in netcdf or grads format.
+With the corresponding upgrade you could query data from stations and request your data in netcdf.
 Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com for an individual offer. 
 """.format(username)
               )
@@ -273,8 +243,10 @@ if __name__ == "__main__":
     password = arguments.password
 
     if username is None or password is None:
-        print(
+        _logger.info(
         "You need to provide a username and a password, either on the command line or by inserting them in the script")
         sys.exit()
-
+    
+    create_log_handler()
+    logging.getLogger(LOGGERNAME).setLevel(logging.INFO)
     example()
