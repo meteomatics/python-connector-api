@@ -257,9 +257,9 @@ def parse_date_num(s):
 def parse_query_station_params(source, parameters, startdate, enddate, location, elevation, id):
     url_params_dict = {
         'source': source,
-        'parameters': ','.join((p for p in parameters)) if len(parameters) > 1 else parameters[0],
-        'startdate': dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ"),
-        'enddate': dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ"),
+        'parameters': ','.join((p for p in parameters)) if parameters else "",
+        'startdate': dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ") if startdate else None,
+        'enddate': dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ") if enddate else None,
         'location': location,
         'elevation': elevation,
         'id': id
