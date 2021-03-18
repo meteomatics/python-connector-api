@@ -254,12 +254,21 @@ def parse_date_num(s):
     return s.map(dates)
 
 
-def parse_query_station_params(source, parameters, startdate, enddate, location, elevation, id):
+def parse_query_station_params(source=None, parameters=None, startdate=None, enddate=None, location=None,
+                               elevation=None, id=None):
+    if parameters is None:
+        parameters_string = None
+    elif isinstance(parameters, list):
+        parameters_string = ','.join((p for p in parameters))
+    elif isinstance(parameters, str):
+        parameters_string = parameters
+    else:
+        raise TypeError("Please use a string or a list of strings for parameters.")
     url_params_dict = {
         'source': source,
-        'parameters': ','.join((p for p in parameters)) if len(parameters) > 1 else parameters[0],
-        'startdate': dt.datetime.strftime(startdate, "%Y-%m-%dT%HZ"),
-        'enddate': dt.datetime.strftime(enddate, "%Y-%m-%dT%HZ"),
+        'parameters':  parameters_string,
+        'startdate': startdate.strftime("%Y-%m-%dT%HZ") if startdate is not None else None,
+        'enddate': enddate.strftime("%Y-%m-%dT%HZ") if enddate is not None else None,
         'location': location,
         'elevation': elevation,
         'id': id
