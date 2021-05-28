@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
 
 import datetime as dt
+from io import StringIO
+
 import pandas as pd
 import pytz
-
-from io import StringIO
 
 from . import rounding
 from ._constants_ import VERSION, NA_VALUES
 from .binary_reader import BinaryReader
-from .exceptions import API_EXCEPTIONS, WeatherApiException
+from .exceptions import WeatherApiException
 
 
 def all_entries_postal(coordinate_list):
     return all([isinstance(coord, str) and coord.startswith('postal_') for coord in coordinate_list])
 
+
 def build_coordinates_str_for_polygon(latlon_tuple_lists, aggregation, operator=None):
-    coordinates_polygon_list = ["_".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]) for latlon_tuple_list in latlon_tuple_lists]
+    coordinates_polygon_list = ["_".join(["{},{}".format(*latlon_tuple) for latlon_tuple in latlon_tuple_list]) for
+                                latlon_tuple_list in latlon_tuple_lists]
 
     if len(coordinates_polygon_list) > 1:
         if operator is not None:
@@ -61,7 +63,7 @@ def build_coordinates_str(latlon_tuple_list, wmo_ids, metar_ids, mch_ids, genera
 def build_coordinates_str_from_postal_codes(postal_codes=None):
     if postal_codes is None:
         return ""
-    return "+".join( ['postal_' + country.upper() + s for (country, pcs) in postal_codes for s in pcs])
+    return "+".join(['postal_' + country.upper() + str(s) for (country, pcs) in postal_codes.items() for s in pcs])
 
 
 def build_response_params(params, ens_params):
@@ -266,7 +268,7 @@ def parse_query_station_params(source=None, parameters=None, startdate=None, end
         raise TypeError("Please use a string or a list of strings for parameters.")
     url_params_dict = {
         'source': source,
-        'parameters':  parameters_string,
+        'parameters': parameters_string,
         'startdate': startdate.strftime("%Y-%m-%dT%HZ") if startdate is not None else None,
         'enddate': enddate.strftime("%Y-%m-%dT%HZ") if enddate is not None else None,
         'location': location,
@@ -277,7 +279,8 @@ def parse_query_station_params(source=None, parameters=None, startdate=None, end
     return filter_none_from_dict(url_params_dict)
 
 
-def parse_query_station_timeseries_params(model=None, on_invalid=None, temporal_interpolation=None, spatial_interpolation=None):
+def parse_query_station_timeseries_params(model=None, on_invalid=None, temporal_interpolation=None,
+                                          spatial_interpolation=None):
     url_params_dict = {
         'connector': VERSION,
         'model': model,
@@ -288,7 +291,8 @@ def parse_query_station_timeseries_params(model=None, on_invalid=None, temporal_
     return filter_none_from_dict(url_params_dict)
 
 
-def parse_time_series_params(model=None, ens_select=None, cluster_select=None, interp_select=None, on_invalid=None, kwargs=None):
+def parse_time_series_params(model=None, ens_select=None, cluster_select=None, interp_select=None, on_invalid=None,
+                             kwargs=None):
     url_params_dict = {
         'connector': VERSION,
         'model': model,

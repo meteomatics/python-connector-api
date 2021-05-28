@@ -9,32 +9,74 @@ write an email to support@meteomatics.com if you need further assistance.
 # Python 2 compatibility
 from __future__ import print_function
 
-import datetime as dt
 import itertools
 import logging
 import os
-import sys
+import warnings
+from functools import wraps
 from io import StringIO
 
 import isodate
 import pandas as pd
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
-from . import _constants_
-from . import rounding
 from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, POLYGON_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, NETCDF_TEMPLATE, STATIONS_LIST_TEMPLATE, \
     INIT_DATE_TEMPLATE, AVAILABLE_TIME_RANGES_TEMPLATE, NA_VALUES, LOGGERNAME
 from .binary_parser import BinaryParser
 from .binary_reader import BinaryReader
 from .exceptions import API_EXCEPTIONS, WeatherApiException
-from .parsing_util import all_entries_postal, build_coordinates_str_for_polygon, build_coordinates_str, build_coordinates_str_from_postal_codes, \
-    build_response_params, convert_grid_binary_response_to_df, convert_lightning_response_to_df, convert_polygon_response_to_df, \
-    datenum_to_date, parse_date_num, extract_user_statistics, parse_ens, parse_query_station_params, parse_query_station_timeseries_params, \
+from .parsing_util import all_entries_postal, build_coordinates_str_for_polygon, build_coordinates_str, \
+    build_coordinates_str_from_postal_codes, \
+    build_response_params, convert_grid_binary_response_to_df, convert_lightning_response_to_df, \
+    convert_polygon_response_to_df, \
+    parse_date_num, extract_user_statistics, parse_ens, parse_query_station_params, \
+    parse_query_station_timeseries_params, \
     parse_time_series_params, parse_url_for_post_data, localize_datenum, sanitize_datetime, set_index_for_ts
 
-
 _logger = logging.getLogger(LOGGERNAME)
+
+
+class Config:
+    _config = {
+        "VERIFY_SSL": True  # Disable SSL verification. This setting is useful for corporate environments where
+        # "secure" proxies are deployed.
+    }
+
+    @staticmethod
+    def get(item):
+        return Config._config[item]
+
+    @staticmethod
+    def set(key, value):
+        if key not in Config._config.keys():
+            raise KeyError("Key '{}' does not exist.".format(key))
+        Config._config[key] = value
+
+
+def handle_ssl(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not Config.get("VERIFY_SSL"):
+            # Disable InsecureRequestWarnings if VERIFY_SSL is disabled.
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', InsecureRequestWarning)
+                return func(*args, verify=False, **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@handle_ssl
+def get_request(*args, **kwargs):
+    return requests.get(*args, **kwargs)
+
+
+@handle_ssl
+def post_request(*args, **kwargs):
+    return requests.post(*args, **kwargs)
+
 
 def create_path(_file):
     _path = os.path.dirname(_file)
@@ -47,13 +89,12 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
               headers={'Accept': 'application/octet-stream'}):
     if request_type.lower() == "get":
         _logger.debug("Calling URL: {} (username = {})".format(url, username))
-        response = requests.get(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
+        response = get_request(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
     elif request_type.lower() == "post":
         url, data = parse_url_for_post_data(url)
         _logger.debug("Calling URL: {} (username = {})".format(url, username))
         headers['Content-Type'] = "text/plain"
-        response = requests.post(url, timeout=timeout_seconds, auth=(username, password), headers=headers,
-                                 data=data)
+        response = post_request(url, timeout=timeout_seconds, auth=(username, password), headers=headers, data=data)
     else:
         raise ValueError('Unknown request_type: {}.'.format(request_type))
 
@@ -66,7 +107,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
 
 def query_user_features(username, password):
     """Get user features"""
-    response = requests.get(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
+    response = get_request(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
     if response.status_code != requests.codes.ok:
         exc = API_EXCEPTIONS[response.status_code]
         raise exc(response.text)
@@ -129,7 +170,8 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
 
     # build URL
     coordinates = build_coordinates_str(latlon_tuple_list, wmo_ids, metar_ids, mch_ids, general_ids, hash_ids)
-    url_params_dict = parse_query_station_timeseries_params(model, on_invalid, temporal_interpolation, spatial_interpolation)
+    url_params_dict = parse_query_station_timeseries_params(model, on_invalid, temporal_interpolation,
+                                                            spatial_interpolation)
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
         coordinates=coordinates,
@@ -208,7 +250,8 @@ def query_time_series(coordinate_list, startdate, enddate, interval, parameters,
     url_params = parse_time_series_params(model, ens_select, cluster_select, interp_select, on_invalid, kwargs)
 
     is_postal = all_entries_postal(coordinate_list)
-    coordinate_list_str = '+'.join(coordinate_list) if is_postal else "+".join(["{},{}".format(*latlon_tuple) for latlon_tuple in coordinate_list])
+    coordinate_list_str = '+'.join(coordinate_list) if is_postal else "+".join(
+        ["{},{}".format(*latlon_tuple) for latlon_tuple in coordinate_list])
 
     url = TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -235,7 +278,8 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
     startdate = sanitize_datetime(startdate)
 
     # build URL
-    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None, interp_select=interp_select, on_invalid=None, kwargs=kwargs)
+    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
+                                          interp_select=interp_select, on_invalid=None, kwargs=kwargs)
     url = GRID_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
@@ -307,7 +351,8 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
     enddate = sanitize_datetime(enddate)
 
     # build URL
-    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None, interp_select=interp_select, on_invalid=on_invalid, kwargs=None)
+    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
+                                          interp_select=interp_select, on_invalid=on_invalid, kwargs=None)
     url = GRID_TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
@@ -415,7 +460,8 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
     enddate = sanitize_datetime(enddate)
 
     # build URL
-    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select, interp_select=interp_select)
+    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select,
+                                               interp_select=interp_select)
     url = NETCDF_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
