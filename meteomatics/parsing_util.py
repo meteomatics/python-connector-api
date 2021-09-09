@@ -204,7 +204,7 @@ def datenum_to_date(date_num):
     try:
         total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
         return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
-    except OverflowError:
+    except (OverflowError, ValueError):
         return pd.NaT
 
 
