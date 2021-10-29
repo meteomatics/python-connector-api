@@ -219,6 +219,23 @@ def extract_user_statistics(response):
         return {key: user_data[key] for key in limits_of_interest}
 
 
+def extract_user_limits(response):
+    """Extract user limits from HTTP response
+
+    returns {limit[name]: (current_count, limit[value]) for limit in defined_limits}
+    """
+    data = response.json()
+    limits_of_interest = ['requests total', 'requests since last UTC midnight', 'requests since HH:00:00',
+                          'requests in the last 60 seconds', 'requests in parallel']
+    try:
+        return {key: (data['user statistics'][key]['used'], data['user statistics'][key]['hard limit'])
+                for key in limits_of_interest if data['user statistics'][key]['hard limit'] != 0 }
+    except TypeError:
+        user_data = next(d for d in data['user statistics'] if d['username'] == username)
+        return {key: (user_data[key]['used'], user_data[key]['hard limit'])
+                for key in limits_of_interest if user_data['user statistics'][key]['hard limit'] != 0}
+
+
 def filter_none_from_dict(d):
     return {k: v for k, v in d.items() if v is not None}
 
