@@ -231,6 +231,9 @@ With the corresponding upgrade you could query data from stations and request yo
 Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com for an individual offer. 
 """.format(username)
               )
+    _logger.info("Checking the limits:")
+    result = api.query_user_limits(username, password)
+    _logger.info(result)
 
 
 if __name__ == "__main__":

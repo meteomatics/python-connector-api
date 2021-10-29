@@ -33,7 +33,8 @@ from .parsing_util import all_entries_postal, build_coordinates_str_for_polygon,
     convert_polygon_response_to_df, \
     parse_date_num, extract_user_statistics, parse_ens, parse_query_station_params, \
     parse_query_station_timeseries_params, \
-    parse_time_series_params, parse_url_for_post_data, localize_datenum, sanitize_datetime, set_index_for_ts
+    parse_time_series_params, parse_url_for_post_data, localize_datenum, sanitize_datetime, set_index_for_ts, \
+    extract_user_limits
 
 _logger = logging.getLogger(LOGGERNAME)
 
@@ -112,6 +113,18 @@ def query_user_features(username, password):
         exc = API_EXCEPTIONS[response.status_code]
         raise exc(response.text)
     return extract_user_statistics(response)
+
+
+def query_user_limits(username, password):
+    """Get users usage and limits
+
+    returns {limit[name]: (current_count, limit[value]) for limit in defined_limits}
+    """
+    response = get_request(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
+    if response.status_code != requests.codes.ok:
+        exc = API_EXCEPTIONS[response.status_code]
+        raise exc(response.text)
+    return extract_user_limits(response)
 
 
 def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parameters, station=False,
