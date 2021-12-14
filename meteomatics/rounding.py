@@ -121,7 +121,7 @@ def get_num_decimal_places(parameter):
             else:
                 return 5
 
-        elif parameter.find('t_2m') != -1 and (parameter.endswith('efi:idx') or parameter.endswith('sot:idx')):
+        elif parameter.endswith('efi:idx') or parameter.endswith('sot:idx'):
             return 3
 
         return 0
