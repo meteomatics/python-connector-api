@@ -95,8 +95,8 @@ t_series_step = dt.timedelta(hours=1)
 animation_step = dt.timedelta(hours=6)
 
 # API access
-username = 'energy_market_plots'
-password = 'GkQ9qqq868Lm'
+username = 'XXXXXX'
+password = 'XXXXXX'
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END CONFIGURATION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
