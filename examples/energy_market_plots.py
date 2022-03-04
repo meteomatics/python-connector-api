@@ -8,6 +8,9 @@ The variables used in the time-series may be straightforwardly changed; the vari
 not configurable (but may be changed in the function) since, in general, a different choice of variable will imply
 a different optimal plot type.
 
+To run the script, an API account is required. Credentials should be updated in the script. A free trial can be
+initiated here: https://www.meteomatics.com/en/api-trial-account-form/
+
 I've experimented with a few different configurations but the code has not been robustly tested: let me know if you
 try something that doesn't work and I'll think about an update.
 """
@@ -30,14 +33,14 @@ import os
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ CONFIGURATION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # 1. What countries/regions do you want in your time-series?
-# These are provided in two arguments. 'standard_countries' is a list of strings which are the names of polygons in
-# geopandas' "naturalearth_lowres" built-in dataset. 'manual_geometries' is a dictionary whose keys are the names you
+# These are provided in two arguments. 'STANDARD_COUNTRIES' is a list of strings which are the names of polygons in
+# geopandas' "naturalearth_lowres" built-in dataset. 'MANUAL_GEOMETRIES' is a dictionary whose keys are the names you
 # want to give to your user-created polygons, and whose keys are the paths to geojson files containing those polygons.
 # I advise that, if you make changes to this, you check that they have been interpreted correctly by switching
-# 'show_polygons' to True. This will show them in your chosen map projection. Speaking of which...
-standard_countries = ['United Kingdom', 'Germany', 'Netherlands', 'Italy']
-manual_geometries = {'Northern France': 'polygons/northern_france.geojson'}
-show_polygons = False
+# 'SHOW_POLYGONS' to True. This will show them in your chosen map projection. Speaking of which...
+STANDARD_COUNTRIES = ['United Kingdom', 'Germany', 'Netherlands', 'Italy']
+MANUAL_GEOMETRIES = {'Northern France': 'polygons/northern_france.geojson'}
+SHOW_POLYGONS = False
 
 # 2. What map projection do you want to show your animated data in?
 # Change entries in the dictionaries to change the bounding box for your animations. This will make a rectangular plot
@@ -45,25 +48,25 @@ show_polygons = False
 # any cartopy projection, but be aware that a) some projections take different arguments to define the transformations
 # and b) some projections will not fill the rectangle defined by the dictionaries in certain parts of the globe (for
 # instance, if you use AzimuthalEquidistant in Europe you'll see the fetched data get squeezed at the top of the plot).
-top_left = {
+TOP_LEFT = {
     'lat': 66.211199,
     'lon': -32.364446
 }
-bottom_right = {
+BOTTOM_RIGHT = {
     'lat': 35.526388,
     'lon': 32
 }
-# crs = ccrs.AzimuthalEquidistant(central_longitude=(top_left['lon']+bottom_right['lon'])/2,
-#                                 central_latitude=(top_left['lat']+bottom_right['lat'])/2)
-crs = ccrs.Mercator(central_longitude=(top_left['lon']+bottom_right['lon'])/2,
-                    min_latitude=bottom_right['lat'],
-                    max_latitude=top_left['lat'])
+# CRS = ccrs.AzimuthalEquidistant(central_longitude=(TOP_LEFT['lon']+BOTTOM_RIGHT['lon'])/2,
+#                                 central_latitude=(TOP_LEFT['lat']+BOTTOM_RIGHT['lat'])/2)
+CRS = ccrs.Mercator(central_longitude=(TOP_LEFT['lon']+BOTTOM_RIGHT['lon'])/2,
+                    min_latitude=BOTTOM_RIGHT['lat'],
+                    max_latitude=TOP_LEFT['lat'])
 
 # 3. What variables are you interested in?
 # Currently this choice only affects time-series plots: the variables used in the animation are static (temperature and
 # pressure, see animate <== make_nc). Keys should be the names you want on your axis labels, and should feature exactly
 # one set of parentheses enclosing the units; values are the names of the corresponding meteomatics strings.
-timeseries_vars = {
+TIMESERIES_VARS = {
     'Temperature (C)': 't_2m:C',
     '90m Wind Speed (m/s)': 'wind_speed_90m:ms',
     'Global Radiation (W/m2)': 'global_rad:W'
@@ -74,29 +77,29 @@ timeseries_vars = {
 # interpolated to 1hrly resolution, but I recommend sub-6hrly for data acquisition, since 0600 and 1800 vary between
 # being daytime- and nighttime values throughout the year. Also note that the API assumes all times are UTC, so a
 # smaller time-step is better for translating to other time-zones). Don't let your climatology get too out of date!
-climatology_start_year = 2005
-climatology_stop_year = 2020
-climatology_step = dt.timedelta(hours=3)
+CLIMATOLOGY_START_YEAR = 2005
+CLIMATOLOGY_STOP_YEAR = 2020
+CLIMATOLOGY_STEP = dt.timedelta(hours=3)
 
 # IMPORTANT! Climatologies are obtained once per new run environment and then imported from .csv in order to reduce
-# runtime. The script is not clever enough to know whether you have changed timeseries_vars or the period to be covered
+# runtime. The script is not clever enough to know whether you have changed TIMESERIES_VARS or the period to be covered
 # by climatology, so make sure you force the recalculation of climatology whenever changes are made.
-rebuild_climatology = False
+REBUILD_CLIMATOLOGY = False
 
 # 5. Plot formatting.
 #   What period do you want your output (time-series and animations) to cover?
 #   What temporal resolution do you want for them both (set separately)?
 #   What spatial resolution do you want in your
 # Note that the animation may fail if you set the time-step very high
-lead_time_days = 28
-start_time = dt.datetime.combine(dt.datetime.now().date(), dt.time(12))  # starts at 12pm on the day called
-t_series_lead = dt.timedelta(days=lead_time_days)
-t_series_step = dt.timedelta(hours=1)
-animation_step = dt.timedelta(hours=6)
+LEAD_TIME_DAYS = 28
+START_TIME = dt.datetime.combine(dt.datetime.now().date(), dt.time(12))  # starts at 12pm on the day called
+T_SERIES_LEAD = dt.timedelta(days=LEAD_TIME_DAYS)
+T_SERIES_STEP = dt.timedelta(hours=1)
+ANIMATION_STEP = dt.timedelta(hours=6)
 
 # API access
-username = 'XXXXXX'
-password = 'XXXXXX'
+USERNAME = 'energy_market_plots'
+PASSWORD = 'GkQ9qqq868Lm'
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END CONFIGURATION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -131,11 +134,11 @@ def get_geometries(standard_countries, manual_geometries, show=False):
     for country in standard_countries:
         geometries[country] = countries[countries.name == country].geometry.values[0]
         if show:
-            geometries_projected[country] = countries[countries.name == country].to_crs(crs.proj4_init).geometry
+            geometries_projected[country] = countries[countries.name == country].to_crs(CRS.proj4_init).geometry
     for country in manual_geometries:
         geometries[country] = gpd.read_file(manual_geometries[country]).geometry.values[0]
         if show:
-            geometries_projected[country] = gpd.read_file(manual_geometries[country]).to_crs(crs.proj4_init).geometry
+            geometries_projected[country] = gpd.read_file(manual_geometries[country]).to_crs(CRS.proj4_init).geometry
     if show:
         show_geometries(geometries_projected)
     return geometries
@@ -144,12 +147,12 @@ def get_geometries(standard_countries, manual_geometries, show=False):
 def show_geometries(geometries):  # TODO could add an option to show overlap
     """
     Plots the projected polygons
-    :param geometries: shapely.[Multi]Polygon objects corresponding to polygons projected into crs (defined in header)
+    :param geometries: shapely.[Multi]Polygon objects corresponding to polygons projected into CRS (defined in header)
     """
     fig = plt.figure()
-    ax = fig.add_subplot(projection=crs)
+    ax = fig.add_subplot(projection=CRS)
     ax.stock_img()
-    ax.set_extent([top_left['lon'], bottom_right['lon'], top_left['lat'], bottom_right['lat']])
+    ax.set_extent([TOP_LEFT['lon'], BOTTOM_RIGHT['lon'], TOP_LEFT['lat'], BOTTOM_RIGHT['lat']])
     for geom in geometries:
         geometries[geom].plot(ax=ax)
     plt.show()
@@ -157,7 +160,7 @@ def show_geometries(geometries):  # TODO could add an option to show overlap
 
 @timer
 def get_polygon_climatology(geometries, location):  # TODO could save climatology locally and only fetch if required
-    if os.path.exists(os.path.join('climatologies', '{}.csv'.format(location))) and not rebuild_climatology:
+    if os.path.exists(os.path.join('climatologies', '{}.csv'.format(location))) and not REBUILD_CLIMATOLOGY:
         print('Climatology for {} exists: reading climatology'.format(location))
     else:
         print('New climatology required for {}.'.format(location))
@@ -179,17 +182,17 @@ def write_climatology(geometries, location):
     tuple_lists = make_tuple_lists(geometry)
     print('Fetching climatology for {}.'.format(location))
     # had to break this down because of 300s timeout. 3hrly still seems reasonable and a bit faster; could go 1hrly now
-    for year in range(climatology_start_year, climatology_stop_year):
-        if year == climatology_start_year:
+    for year in range(CLIMATOLOGY_START_YEAR, CLIMATOLOGY_STOP_YEAR):
+        if year == CLIMATOLOGY_START_YEAR:
             df = api.query_polygon(
                 latlon_tuple_lists=tuple_lists,
                 startdate=dt.datetime(year, 1, 1),
-                enddate=dt.datetime(year, 12, 31, int(24 - climatology_step.seconds/3600.)),
-                interval=climatology_step,
-                parameters=timeseries_vars.values(),
+                enddate=dt.datetime(year, 12, 31, int(24 - CLIMATOLOGY_STEP.seconds/3600.)),
+                interval=CLIMATOLOGY_STEP,
+                parameters=TIMESERIES_VARS.values(),
                 aggregation=['mean'],
-                username=username,
-                password=password,
+                username=USERNAME,
+                password=PASSWORD,
                 operator='U',  # in case of MultiPolygons
                 model='ecmwf-era5',
                 polygon_sampling='adaptive_grid'
@@ -199,12 +202,12 @@ def write_climatology(geometries, location):
                 api.query_polygon(
                     latlon_tuple_lists=tuple_lists,
                     startdate=dt.datetime(year, 1, 1),
-                    enddate=dt.datetime(year, 12, 31, int(24 - climatology_step.seconds/3600.)),
-                    interval=climatology_step,
-                    parameters=timeseries_vars.values(),
+                    enddate=dt.datetime(year, 12, 31, int(24 - CLIMATOLOGY_STEP.seconds/3600.)),
+                    interval=CLIMATOLOGY_STEP,
+                    parameters=TIMESERIES_VARS.values(),
                     aggregation=['mean'],
-                    username=username,
-                    password=password,
+                    username=USERNAME,
+                    password=PASSWORD,
                     operator='U',  # in case of MultiPolygons
                     model='ecmwf-era5',
                     polygon_sampling='adaptive_grid'
@@ -229,16 +232,16 @@ def get_polygon_data(geometry):  # TODO could make parameters variable
     :return: pandas.DataFrame of spatial mean time-series data for the polygon; time-series parameters defined in header
     """
     tuple_lists = make_tuple_lists(geometry)
-    print('Fetching time-series data for the next {} days.'.format(lead_time_days))
+    print('Fetching time-series data for the next {} days.'.format(LEAD_TIME_DAYS))
     df = api.query_polygon(
         latlon_tuple_lists=tuple_lists,
-        startdate=start_time,
-        enddate=start_time + t_series_lead,
-        interval=t_series_step,
-        parameters=timeseries_vars.values(),
+        startdate=START_TIME,
+        enddate=START_TIME + T_SERIES_LEAD,
+        interval=T_SERIES_STEP,
+        parameters=TIMESERIES_VARS.values(),
         aggregation=['mean'],
-        username=username,
-        password=password,
+        username=USERNAME,
+        password=PASSWORD,
         operator='U',  # not necessary for the single polygon, but doesn't break and is necessary for multi-polygons
         model='ecmwf-vareps',
         polygon_sampling='adaptive_grid'
@@ -324,17 +327,17 @@ def plot_timeseries(title, mins, maxs):
     :param maxs: dictionary of global maximum values corresponding to each variable
     """
     df = pd.read_csv(os.path.join('time-series', 'time-series data {}.csv'.format(title)), index_col=0, parse_dates=True)
-    for var in timeseries_vars:
+    for var in TIMESERIES_VARS:
         try:
             assert '(' in var
         except AssertionError:
-            raise ValueError('Make sure the timeseries_vars dict is formatted correctly')
-        mm_string = timeseries_vars[var]
+            raise ValueError('Make sure the TIMESERIES_VARS dict is formatted correctly')
+        mm_string = TIMESERIES_VARS[var]
         unit_index = len(var.split('(')[0])
         vmin = mins[mm_string] - (maxs[mm_string] - mins[mm_string]) * 0.1
         vmax = maxs[mm_string] + (maxs[mm_string] - mins[mm_string]) * 0.1
         f, (ax1, ax2) = plt.subplots(2, sharex='col', figsize=(12, 7))
-        climatology_years = climatology_stop_year - climatology_start_year
+        climatology_years = CLIMATOLOGY_STOP_YEAR - CLIMATOLOGY_START_YEAR
         df['{}_climatology'.format(mm_string)].plot(label='{}-year mean'.format(climatology_years), ax=ax1, c='b')
         df['{}_forecast'.format(mm_string)].plot(label='forecast', ax=ax1, ylim=[vmin, vmax], c='k')
         pd.Series(np.zeros(len(df.index)), index=df.index).plot(ax=ax2, linestyle='dashed', c='b')
@@ -360,21 +363,21 @@ def make_nc():
     xarray.Dataset very easily.
     :return: xarray.Dataset containing 2m temperature and MSLP
     """
-    for day in range(lead_time_days):
-        query_start = start_time + dt.timedelta(days=day)
+    for day in range(LEAD_TIME_DAYS):
+        query_start = START_TIME + dt.timedelta(days=day)
         df = api.query_grid_timeseries(
             startdate=query_start,
             enddate=query_start + dt.timedelta(hours=23), # ensures we don't double-count days
-            interval=animation_step,
+            interval=ANIMATION_STEP,
             parameters=['t_2m:C', 'msl_pressure:hPa'],
-            lat_N=np.ceil(top_left['lat'] + 1),
-            lon_W=np.floor(top_left['lon'] - 1),
-            lat_S=np.floor(bottom_right['lat'] - 1),
-            lon_E=np.ceil(bottom_right['lon'] + 1),
+            lat_N=np.ceil(TOP_LEFT['lat'] + 1),
+            lon_W=np.floor(TOP_LEFT['lon'] - 1),
+            lat_S=np.floor(BOTTOM_RIGHT['lat'] - 1),
+            lon_E=np.ceil(BOTTOM_RIGHT['lon'] + 1),
             res_lon=0.5,
             res_lat=0.5,
-            username=username,
-            password=password,
+            username=USERNAME,
+            password=PASSWORD,
             model='ecmwf-vareps'
         )
         if day == 0:
@@ -392,19 +395,19 @@ def make_nc():
 
 def transform_coords(nc):
     """
-    I found the suggested method of adding a transorm=crs keyword argument to plotting functions not to work with
+    I found the suggested method of adding a transorm=CRS keyword argument to plotting functions not to work with
     e.g. Azimuthal equidistant. Perhaps this is something to do with pcolor. Anyway, here's my solution: define a
     2D latitude and longitude variable which corresponds to the data variables; transform those and return them.
     :param nc: xarray dataset containing latitude and longitude coordinates
-    :return: longitude and latitudes transformed to your chosen crs
+    :return: longitude and latitudes transformed to your chosen CRS
     """
     # We first need latitude- and longitude arrays of equal size. Since we may be working with a map which has different
     # x- and y-dimensions, and also since we may not be mapping to a rectilinear coordinate system, we first have to
     # make 2D arrays of each
     meshed_lon, meshed_lat = np.meshgrid(nc.lon.values, nc.lat.values)
-    # We can then transform these to our target crs. The source crs is PlateCarree() i.e. PlateCarree with default args
+    # We can then transform these to our target CRS. The source CRS is PlateCarree() i.e. PlateCarree with default args
     # i.e. quadratic grid, as this is the coordinate system returned from the Meteomatics API.
-    transformed_output = crs.transform_points(ccrs.PlateCarree(), meshed_lon, meshed_lat)
+    transformed_output = CRS.transform_points(ccrs.PlateCarree(), meshed_lon, meshed_lat)
     # This gives us a 3D array of x, y, z; the latter will, for our purposes, be identically 0. We can subset this as
     transformed_lons = transformed_output[:, :, 0]
     transformed_lats = transformed_output[:, :, 1]
@@ -420,8 +423,8 @@ def make_frames(nc, lons, lats, animation_path):
     """
     Make all the individual images which will comprise the final gif.
     :param nc: the netCDF containing the data
-    :param lons: the 2D grid of longitudes transformed to the crs != nc.lon.values
-    :param lats: the 2D grid of latitudes transformed to the crs != nc.lat.values
+    :param lons: the 2D grid of longitudes transformed to the CRS != nc.lon.values
+    :param lats: the 2D grid of latitudes transformed to the CRS != nc.lat.values
     :param animation_path: location in which to save the frames
     :return:
     """
@@ -441,8 +444,8 @@ def make_frames(nc, lons, lats, animation_path):
     # this will save a bunch of static images, which can of course be giffed
     for t_step in range(len(nc.validdate)):
         fig = plt.figure()
-        ax = fig.add_subplot(projection=crs)
-        ax.set_extent([top_left['lon'], bottom_right['lon'], top_left['lat'], bottom_right['lat']])
+        ax = fig.add_subplot(projection=CRS)
+        ax.set_extent([TOP_LEFT['lon'], BOTTOM_RIGHT['lon'], TOP_LEFT['lat'], BOTTOM_RIGHT['lat']])
         nc_step = nc.isel(validdate=t_step)
         cbar_map = ax.pcolor(lons, lats, nc_step['t_2m:C'], vmin=t2m_min, vmax=t2m_max)
         contours = ax.contour(lons, lats, nc_step['msl_pressure:hPa'], levels=contour_levels, colors='black')
@@ -481,14 +484,14 @@ def animate(animation_path='animation'):
 if __name__ == '__main__':
     # get the geometries of the polygons for which we want time-series plots
     geometries = get_geometries(
-        standard_countries=standard_countries,
-        manual_geometries=manual_geometries,
-        show=show_polygons
+        standard_countries=STANDARD_COUNTRIES,
+        manual_geometries=MANUAL_GEOMETRIES,
+        show=SHOW_POLYGONS
     )
 
     # for each of those polygons, write the time-series data and get a global min/max for each variable
-    mins = {var: np.inf for var in timeseries_vars.values()}
-    maxs = {var: -np.inf for var in timeseries_vars.values()}
+    mins = {var: np.inf for var in TIMESERIES_VARS.values()}
+    maxs = {var: -np.inf for var in TIMESERIES_VARS.values()}
     for key in geometries:
         mins, maxs = get_combined_data(geometries, key, mins, maxs)
 
