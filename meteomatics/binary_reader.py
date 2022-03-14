@@ -41,7 +41,9 @@ class BinaryReader(object):
         if len(substring) != num_of_bytes * n:
             raise BinaryReaderException(
                 "Not possible to read {} bytes, length of binary data is {} bytes".format(num_of_bytes * n,
-                                                                                          len(self)))
+                                                                                          len(self))
+                + "\nDecoded content: {}".format(self._binary_data.decode('utf-8', errors='replace'))
+            )
         self._pointer += num_of_bytes * n
         return struct.unpack("<{}".format(self.DATA_TYPES[data_type]["format_char"] * n), substring)
 
