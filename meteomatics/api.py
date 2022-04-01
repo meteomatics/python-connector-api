@@ -463,7 +463,7 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
 
 def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon,
                  username, password, model=None, ens_select=None, interp_select=None,
-                 api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None):
+                 api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None, mask=None):
     """Queries a netCDF file form the Meteomatics API and stores it in filename.
     request_type is one of 'GET'/'POST'
     """
@@ -474,7 +474,7 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
 
     # build URL
     url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select,
-                                               interp_select=interp_select)
+                                               interp_select=interp_select,mask=mask)
     url = NETCDF_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
