@@ -6,24 +6,11 @@ import argparse
 import datetime as dt
 import logging
 import sys
+from examples.credentials import username as username_default, password as password_default
 
 import meteomatics.api as api
 from meteomatics.logger import create_log_handler
 from meteomatics._constants_ import LOGGERNAME
-
-'''
-    For further information on available parameters, models etc. please visit
-    api.meteomatics.com
-
-    In case of questions just write a mail to:
-    support@meteomatics.com
-'''
-
-###Credentials:
-
-username = 'python-community'
-password = 'Umivipawe179'
-
 
 def example():
     _logger = logging.getLogger(LOGGERNAME)
@@ -236,20 +223,22 @@ Please check http://shop.meteomatics.com or contact us at shop@meteomatics.com f
     _logger.info(result)
 
 
-if __name__ == "__main__":
+def run_example(example_lambda):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--username', default=username)
-    parser.add_argument('--password', default=password)
+    parser.add_argument('--username', default=username_default)
+    parser.add_argument('--password', default=password_default)
     arguments = parser.parse_args()
 
     username = arguments.username
     password = arguments.password
 
+    create_log_handler()
+    logging.getLogger(LOGGERNAME).setLevel(logging.INFO)
+    _logger = logging.getLogger(LOGGERNAME)
+
     if username is None or password is None:
         _logger.info(
         "You need to provide a username and a password, either on the command line or by inserting them in the script")
         sys.exit()
-    
-    create_log_handler()
-    logging.getLogger(LOGGERNAME).setLevel(logging.INFO)
-    example()
+
+    example_lambda(username, password, _logger)
