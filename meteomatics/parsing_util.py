@@ -208,17 +208,6 @@ def datenum_to_date(date_num):
         return pd.NaT
 
 
-def extract_user_statistics(response):
-    """Extract user statistics from HTTP response"""
-    data = response.json()
-    limits_of_interest = ['historic request option', 'model select option', 'area request option']
-    try:
-        return {key: data['user statistics'][key] for key in limits_of_interest}
-    except TypeError:
-        user_data = next(d for d in data['user statistics'] if d['username'] == username)
-        return {key: user_data[key] for key in limits_of_interest}
-
-
 def extract_user_limits(response):
     """Extract user limits from HTTP response
 
