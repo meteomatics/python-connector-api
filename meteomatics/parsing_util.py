@@ -5,6 +5,7 @@ from io import StringIO
 
 import pandas as pd
 import pytz
+from meteomatics.deprecated import deprecated
 
 from . import rounding
 from ._constants_ import VERSION, NA_VALUES
@@ -208,6 +209,10 @@ def datenum_to_date(date_num):
         return pd.NaT
 
 
+@deprecated("This function will be removed/renamed because it only provides info about the licensing options "
+            "and not real user statistics. "
+            "In addition, do not programmatically rely on user features since the returned keys can change "
+            "over time due to internal changes.")
 def extract_user_statistics(response):
     """Extract user statistics from HTTP response"""
     data = response.json()
@@ -229,7 +234,7 @@ def extract_user_limits(response):
                           'requests in the last 60 seconds', 'requests in parallel']
     try:
         return {key: (data['user statistics'][key]['used'], data['user statistics'][key]['hard limit'])
-                for key in limits_of_interest if data['user statistics'][key]['hard limit'] != 0 }
+                for key in limits_of_interest if data['user statistics'][key]['hard limit'] != 0}
     except TypeError:
         user_data = next(d for d in data['user statistics'] if d['username'] == username)
         return {key: (user_data[key]['used'], user_data[key]['hard limit'])
