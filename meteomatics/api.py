@@ -437,7 +437,7 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
 
 
 def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, password,
-                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET', model='mix'):
     """Queries lightning strokes in the specified area during the specified time via the Meteomatics API.
     Returns a Pandas 'DataFrame'.
     request_type is one of 'GET'/'POST'
@@ -454,7 +454,8 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
         lat_N=lat_N,
         lon_W=lon_W,
         lat_S=lat_S,
-        lon_E=lon_E
+        lon_E=lon_E,
+        source=model
     )
 
     headers = {'Accept': 'text/csv'}
