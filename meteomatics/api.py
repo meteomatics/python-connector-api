@@ -20,7 +20,6 @@ import isodate
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
-from meteomatics.deprecated import deprecated
 
 from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, POLYGON_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, NETCDF_TEMPLATE, STATIONS_LIST_TEMPLATE, \
@@ -450,7 +449,7 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
 
 
 def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, password,
-                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET', model='mix'):
+                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
     """Queries lightning strokes in the specified area during the specified time via the Meteomatics API.
     Returns a Pandas 'DataFrame'.
     request_type is one of 'GET'/'POST'
@@ -467,8 +466,7 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
         lat_N=lat_N,
         lon_W=lon_W,
         lat_S=lat_S,
-        lon_E=lon_E,
-        source=model
+        lon_E=lon_E
     )
 
     headers = {'Accept': 'text/csv'}
