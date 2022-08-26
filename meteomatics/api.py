@@ -20,6 +20,7 @@ import isodate
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
+from meteomatics.deprecated import deprecated
 
 from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, POLYGON_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, NETCDF_TEMPLATE, STATIONS_LIST_TEMPLATE, \
@@ -41,8 +42,9 @@ _logger = logging.getLogger(LOGGERNAME)
 
 class Config:
     _config = {
-        "VERIFY_SSL": True  # Disable SSL verification. This setting is useful for corporate environments where
+        "VERIFY_SSL": True,  # Disable SSL verification. This setting is useful for corporate environments where
         # "secure" proxies are deployed.
+        "PROXIES": {}  # proxies – (optional) Dictionary mapping protocol to the URL of the proxy.
     }
 
     @staticmethod
@@ -69,12 +71,24 @@ def handle_ssl(func):
     return wrapper
 
 
+def handle_proxy(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not len(Config.get("PROXIES")) == 0:
+            return func(*args, proxies=Config.get("PROXIES"), **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 @handle_ssl
+@handle_proxy
 def get_request(*args, **kwargs):
     return requests.get(*args, **kwargs)
 
 
 @handle_ssl
+@handle_proxy
 def post_request(*args, **kwargs):
     return requests.post(*args, **kwargs)
 
@@ -106,6 +120,7 @@ def query_api(url, username, password, request_type="GET", timeout_seconds=300,
     return response
 
 
+@deprecated("Do not programmatically rely on user features since the returned keys can change over time.")
 def query_user_features(username, password):
     """Get user features"""
     response = get_request(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
@@ -435,7 +450,7 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
 
 
 def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, password,
-                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET', model='mix'):
     """Queries lightning strokes in the specified area during the specified time via the Meteomatics API.
     Returns a Pandas 'DataFrame'.
     request_type is one of 'GET'/'POST'
@@ -452,7 +467,8 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
         lat_N=lat_N,
         lon_W=lon_W,
         lat_S=lat_S,
-        lon_E=lon_E
+        lon_E=lon_E,
+        source=model
     )
 
     headers = {'Accept': 'text/csv'}
@@ -463,7 +479,7 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
 
 def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon,
                  username, password, model=None, ens_select=None, interp_select=None,
-                 api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None, mask=None):
+                 api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None):
     """Queries a netCDF file form the Meteomatics API and stores it in filename.
     request_type is one of 'GET'/'POST'
     """
@@ -474,7 +490,7 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
 
     # build URL
     url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select,
-                                               interp_select=interp_select,mask=mask)
+                                               interp_select=interp_select)
     url = NETCDF_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
