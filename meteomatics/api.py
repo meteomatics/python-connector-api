@@ -71,6 +71,7 @@ def handle_ssl(func):
 
 
 def handle_proxy(func):
+    """Passing the proxies dictionary to requests proxies optional argument."""
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not len(Config.get("PROXIES")) == 0:
