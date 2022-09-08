@@ -42,8 +42,9 @@ _logger = logging.getLogger(LOGGERNAME)
 
 class Config:
     _config = {
-        "VERIFY_SSL": True  # Disable SSL verification. This setting is useful for corporate environments where
+        "VERIFY_SSL": True,  # Disable SSL verification. This setting is useful for corporate environments where
         # "secure" proxies are deployed.
+        "PROXIES": {}  # proxies – (optional) Dictionary mapping protocol to the URL of the proxy.
     }
 
     @staticmethod
@@ -70,12 +71,25 @@ def handle_ssl(func):
     return wrapper
 
 
+def handle_proxy(func):
+    """Passing the proxies dictionary to requests proxies optional argument."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not len(Config.get("PROXIES")) == 0:
+            return func(*args, proxies=Config.get("PROXIES"), **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 @handle_ssl
+@handle_proxy
 def get_request(*args, **kwargs):
     return requests.get(*args, **kwargs)
 
 
 @handle_ssl
+@handle_proxy
 def post_request(*args, **kwargs):
     return requests.post(*args, **kwargs)
 
