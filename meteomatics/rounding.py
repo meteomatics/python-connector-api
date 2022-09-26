@@ -3,7 +3,7 @@ import numpy as np
 
 decimal_places = {
     "bft": 0,  # Beauforts (wind)
-    "cm": -1,  # centimeters (snow height, hail)
+    "cm": 1,  # centimeters (snow height, hail)
     "C": 1,  # temperature
     "d": -1,  # days AND degrees...
     "dn": 5,  # datenums
