@@ -334,9 +334,13 @@ def parse_url_for_post_data(url):
     """Split the url between url and data if needed"""
     url_splitted = url.split("/", 4)
     data = None
+    max_length_url = 2000
     if len(url_splitted) > 4:
         url = "/".join(url_splitted[0:4])
         data = url_splitted[4]
+        if len(url) > max_length_url:
+            url = "/".join(url_splitted[0:3])
+            data = "/".join(url_splitted[3:])
     return url, data
 
 
