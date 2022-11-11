@@ -332,11 +332,15 @@ def parse_time_series_params(model=None, ens_select=None, cluster_select=None, i
 
 def parse_url_for_post_data(url):
     """Split the url between url and data if needed"""
-    url_splitted = url.split("/", 3)
+    url_splitted = url.split("/", 4)
     data = None
-    if len(url_splitted) > 3:
-        url = "/".join(url_splitted[0:3])
-        data = url_splitted[3]
+    max_length_url=2000
+    if len(url_splitted) > 4:
+        url = "/".join(url_splitted[0:4])
+        data = url_splitted[4]
+        if len(url)>max_length_url:
+            url = "/".join(url_splitted[0:3])
+            data = "/".join(url_splitted[3:len(url_splitted)])
     return url, data
 
 
