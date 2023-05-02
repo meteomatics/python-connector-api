@@ -17,7 +17,7 @@ try something that doesn't work and I'll think about an update.
 
 import shapely.geometry as sgeometry
 import matplotlib.pyplot as plt
-import mm_python_module.api_connector.meteomatics.api as api
+import meteomatics.api as api
 import cartopy.crs as ccrs
 import geopandas as gpd
 from PIL import Image
