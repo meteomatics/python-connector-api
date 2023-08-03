@@ -8,9 +8,9 @@ def unpivoted_grid_example(username: str, password: str, _logger):
     lon_W = -15
     lat_S = 20
     lon_E = 10
-    res_lat = 3
-    res_lon = 3
-    parameters_grid_unpiv = ['t_2m:C', 'rr_1h:mm']
+    res_lat = 1
+    res_lon = 1
+    parameters_grid_unpiv = ['t_2m:C', 'precip_1h:mm']
     valid_dates_unpiv = [dt.datetime.utcnow(), dt.datetime.utcnow() + dt.timedelta(days=1)]
 
     _logger.info("\nunpivoted grid:")

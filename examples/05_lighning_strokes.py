@@ -3,7 +3,7 @@ import datetime as dt
 import meteomatics.api as api
 
 
-def grid_png_example(username: str, password: str, _logger):
+def lightning_strokes_example(username: str, password: str, _logger):
     startdate_l = dt.datetime.utcnow() - dt.timedelta(days=1)
     enddate_l = dt.datetime.utcnow() - dt.timedelta(minutes=5)
     lat_N_l = 90
@@ -23,4 +23,4 @@ def grid_png_example(username: str, password: str, _logger):
 
 
 if __name__ == "__main__":
-    run_example(grid_png_example)
+    run_example(lightning_strokes_example)

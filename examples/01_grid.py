@@ -8,8 +8,8 @@ def grid_example(username: str, password: str, _logger):
     lon_W = -15
     lat_S = 20
     lon_E = 10
-    res_lat = 3
-    res_lon = 3
+    res_lat = 1
+    res_lon = 1
     startdate_grid = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     parameter_grid = 'evapotranspiration_1h:mm'  # 't_2m:C'
 

@@ -13,7 +13,7 @@ def grid_time_series_example(username: str, password: str, _logger):
     startdate_ts = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     enddate_ts = startdate_ts + dt.timedelta(days=1)
     interval_ts = dt.timedelta(hours=1)
-    parameters_ts = ['t_2m:C', 'rr_1h:mm']
+    parameters_ts = ['t_2m:C', 'precip_1h:mm']
 
     _logger.info("\ngrid timeseries:")
     try:

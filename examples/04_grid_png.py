@@ -8,8 +8,8 @@ def grid_png_example(username: str, password: str, _logger):
     lon_W = -15
     lat_S = 20
     lon_E = 10
-    res_lat = 3
-    res_lon = 3
+    res_lat = 0.1
+    res_lon = 0.1
     filename_png = "grid_target.png"
     startdate_png = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     parameter_png = 't_2m:C'
