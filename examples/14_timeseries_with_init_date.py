@@ -12,13 +12,12 @@ def time_series_example(username: str, password: str, _logger):
     model = 'ecmwf-ifs'
     ens_select = None  # e.g. 'median'
     cluster_select = None  # e.g. "cluster:1", see http://api.meteomatics.com/API-Request.html#cluster-selection
-    interp_select = 'gradient_interpolation'
 
     _logger.info("\ntime series:")
     try:
         # init_date goes as part of kwargs of the function and is added to the final URL
         df_ts = api.query_time_series(coordinates_ts, startdate_ts, enddate_ts, interval_ts, parameters_ts,
-                                      username, password, model, ens_select, interp_select,
+                                      username, password, model, ens_select,
                                       cluster_select=cluster_select, init_date="2022-05-19T00Z")
         _logger.info("Dataframe head \n" + df_ts.head().to_string())
     except Exception as e:
