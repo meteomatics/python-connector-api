@@ -174,7 +174,7 @@ def query_station_list(username, password, source=None, parameters=None, startda
     sl = pd.read_csv(StringIO(response.text), sep=";")
     sl['lat'] = sl['Location Lat,Lon'].apply(lambda x: float(x.split(",")[0]))
     sl['lon'] = sl['Location Lat,Lon'].apply(lambda x: float(x.split(",")[1]))
-    sl.drop('Location Lat,Lon', 1, inplace=True)
+    sl.drop('Location Lat,Lon', axis=1, inplace=True)
 
     return sl
 
