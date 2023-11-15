@@ -365,7 +365,8 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
 
 def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W, lat_S, lon_E,
                           res_lat, res_lon, username, password, model=None, ens_select=None, interp_select=None,
-                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES):
+                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES,
+                          **kwargs):
     """Retrieve a grid time series from the Meteomatics Weather API.
        Start and End dates have to be in UTC.
        Returns a Pandas `DataFrame` with a `DateTimeIndex`.
@@ -381,7 +382,7 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
 
     # build URL
     url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
-                                          interp_select=interp_select, on_invalid=on_invalid, kwargs=None)
+                                          interp_select=interp_select, on_invalid=on_invalid, kwargs=kwargs)
     url = GRID_TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
