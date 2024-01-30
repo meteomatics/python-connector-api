@@ -377,7 +377,6 @@ def set_index_for_ts(df, is_station, coordinate_list):
         df = df.set_index(['lat', 'lon', 'validdate'])
     else:
         col_name = 'postal_code' if is_postal else 'station_id'
-        parameters = list(set(df.columns) - set([col_name]))
         split_point = len(df) / len(coordinate_list)
         if col_name not in df.columns:
             df[col_name] = ""  # create new column
