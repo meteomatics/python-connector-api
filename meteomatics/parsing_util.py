@@ -377,11 +377,12 @@ def set_index_for_ts(df, is_station, coordinate_list):
         df = df.set_index(['lat', 'lon', 'validdate'])
     else:
         col_name = 'postal_code' if is_postal else 'station_id'
-        parameters = list(set(df.columns) - set([col_name]))
         split_point = len(df) / len(coordinate_list)
         if col_name not in df.columns:
+            df[col_name] = ""  # create new column
+            new_col_index = len(df.columns)-1  # use iloc for indexed based slicing
             for i in range(len(coordinate_list)):
-                df.loc[int(i * split_point): int((i + 1) * split_point), col_name] = coordinate_list[i]
+                df.iloc[int(i * split_point): int((i + 1) * split_point), new_col_index] = coordinate_list[i]
         # set multiindex
         df = df.reset_index().set_index([col_name, 'validdate'])
         df = df.sort_index()
