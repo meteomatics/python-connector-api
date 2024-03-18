@@ -74,6 +74,10 @@ def get_num_decimal_places(parameter):
     except KeyError:
         return 3
 
+    # For the vertical wind speed we need a higher precision than for the other wind speed parameters.
+    if parameter.startswith("wind_speed_w") and unit == "ms":
+        number_of_decimals = 2
+
     if number_of_decimals >= 0:
         return number_of_decimals
 
