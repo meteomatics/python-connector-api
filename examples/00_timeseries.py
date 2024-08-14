@@ -19,6 +19,7 @@ def time_series_example(username: str, password: str, _logger):
                                       username, password, model, ens_select,
                                       cluster_select=cluster_select)
         _logger.info("Dataframe head \n" + df_ts.head().to_string())
+        _logger.info("Dataframe head complete indexes \n" + df_ts.reset_index().head().to_string())
     except Exception as e:
         _logger.info("Failed, the exception is {}".format(e))
         return False
