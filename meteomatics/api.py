@@ -300,7 +300,7 @@ def query_time_series(coordinate_list, startdate, enddate, interval, parameters,
 
 
 def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password, model=None,
-               ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
+               ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
                na_values=NA_VALUES,
                **kwargs):
     # interpret time as UTC
@@ -308,7 +308,7 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
     # build URL
     url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
-                                          interp_select=interp_select, on_invalid=None, kwargs=kwargs)
+                                          interp_select=interp_select, on_invalid=on_invalid, kwargs=kwargs)
     url = GRID_TEMPLATE.format(
         api_base_url=api_base_url,
         startdate=startdate.isoformat(),
@@ -327,7 +327,7 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
 
 
 def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
-                         model=None, ens_select=None, interp_select=None, request_type='GET', na_values=NA_VALUES):
+                         model=None, ens_select=None, interp_select=None, on_invalid=None, request_type='GET', na_values=NA_VALUES):
     idxcols = ['valid_date', 'lat', 'lon']
     vd_dfs = []
 
@@ -336,7 +336,7 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
         for parameter in parameters:
 
             dmo = query_grid(valid_date, parameter, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
-                             model, ens_select, interp_select, request_type=request_type, na_values=na_values)
+                             model, ens_select, interp_select, on_invalid=on_invalid, request_type=request_type, na_values=na_values)
 
             df = pd.melt(dmo.reset_index(), id_vars='lat', var_name='lon', value_name=parameter)
             df['valid_date'] = valid_date
