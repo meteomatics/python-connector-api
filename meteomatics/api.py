@@ -101,7 +101,7 @@ def create_path(_file):
         os.makedirs(_path)
 
 
-def query_api(url, username, password, request_type="GET", timeout_seconds=300,
+def query_api(url, username, password, request_type="GET", timeout_seconds=330,
               headers={'Accept': 'application/octet-stream'}):
     if request_type.lower() == "get":
         _logger.debug("Calling URL: {} (username = {})".format(url, username))
