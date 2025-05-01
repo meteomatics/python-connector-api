@@ -52,7 +52,7 @@ def is_grid_query_possible(username: str, password: str):
 
 def is_model_selection_possible(username: str, password: str):
     try:
-        api.query_available_time_ranges(['t_2m:C', 'precip_6h:mm'], username, password, 'ukmo-euro4')
+        api.query_available_time_ranges(['t_2m:C', 'precip_6h:mm'], username, password, 'dwd-icon-eu')
     except Forbidden:
         return False
     return True
