@@ -1,0 +1,106 @@
+import geopandas as gpd
+from shapely.geometry import Point
+import pandas as pd
+from meteomatics import api
+import datetime as dt
+import numpy as np
+import arcgis, sys, os, tempfile, json, logging, arcpy, shutil, fnmatch, subprocess
+
+
+__name__ == '__main__'
+USERNAME = 'your_username'
+PASSWORD = 'your_password'
+
+PARAMS = ['wind_speed_2m:ms']  # add as many valid API parameters to this list as you like
+
+
+def feedRoutine(work, live):
+    # Create two GeoDataBases: one holds the data from the layer we want to push to ArcGIS at the end of the script for
+    # the purposes of working with it within the script; the other is the layer which is currently being hosted on
+    # ArcGIS. At the end of the script we overwrite the liveGDB with the workGDB. The lines below simply create path
+    # strings for both the GBDs
+    workGDB = os.path.join(os.getcwd(), "{}.gdb".format(work))
+    liveGDB = os.path.join(os.getcwd(), "{}.gdb".format(live))
+
+    # Set up a log file to collect runtime information
+    logging.basicConfig(filename="darden_wind.log", level=logging.INFO)
+    log_format = "%Y-%m-%d %H:%M:%S"
+
+    # Create liveGDB if it doesn't already exist (i.e. first call)
+    if arcpy.Exists(liveGDB):
+        pass
+    else:
+        arcpy.management.CreateFileGDB(os.path.dirname(liveGDB), os.path.basename(liveGDB))
+
+    print("Starting workGDB...")
+    logging.info("Starting workGDB... {0}".format(dt.datetime.now().strftime(log_format)))
+
+    # Set the default workspace to workGDB
+    arcpy.env.workspace = workGDB
+    # If the workGDB exists, remove the old features
+    if arcpy.Exists(arcpy.env.workspace):
+        # TODO change darden_ for airports_ or whatever
+        for feat in arcpy.ListFeatureClasses("darden_*"):
+            arcpy.management.Delete(feat)
+    # Otherwise, create it (it will be blank)
+    else:
+        arcpy.management.CreateFileGDB(os.path.dirname(workGDB), os.path.basename(workGDB))
+
+    temp_dir = tempfile.mkdtemp()
+    filename = os.path.join(temp_dir, 'latest_data.geojson')
+
+    # Read the airports dataset
+    # lat/lon set as index for easy merging; add numerical ID; duplicate fields dropped
+    airports = pd.read_csv('poi_european_airports.csv', header=None, index_col=[0, 1])
+    airports['ID'] = (np.arange(len(airports)) + 1).astype(float)
+    airports = airports[airports.index.duplicated() == False]
+
+    # get API data
+    # remove datetime multi-index layer
+    now = dt.datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    step = dt.timedelta(hours=1)
+    print("Downloading data...")
+    logging.info("Downloading data... {0}".format(dt.datetime.now().strftime(log_format)))
+    api_data = api.query_time_series(
+        airports.index.values, now, now + step, step, PARAMS, USERNAME, PASSWORD
+    ).xs(
+        key=now.strftime('%Y-%m-%d %H:00:00+00:00'), level=2
+    )
+    # Make sure the index name and MultiIndex names are the same
+    airports.index.name = api_data.index.name
+    airports.index.names = api_data.index.names
+
+    # Merge the DataFrames and write to geoJSON; convert to features
+    logging.info("Creating feature classes... {0}".format(dt.datetime.now().strftime(log_format)))
+    combined = pd.merge(api_data, airports, left_index=True, right_index=True)
+    geom = [Point(coord[1], coord[0]) for coord in api_data.index]
+    gdf = gpd.GeoDataFrame(combined.assign(coordinates=geom).reset_index(), geometry='coordinates')
+    gdf.to_file("latest_data.geojson", driver='GeoJSON')
+
+    # Convert the data file to features in arcpy
+    arcpy.conversion.JSONToFeatures("latest_data.geojson", 'airports', 'POINT')
+
+    # Call the deployLogic function to replace the liveGDB with the workGDB
+    print("Deploying...")
+    logging.info("Deploying... {0}".format(dt.datetime.now().strftime(log_format)))
+    deployLogic(workGDB, liveGDB)
+
+    # Close Log File
+    logging.shutdown()
+
+    print("Done!")
+    logging.info("Done! {0}".format(dt.datetime.now().strftime(log_format)))
+
+    return True
+
+
+def deployLogic(work, live):
+    # Use shutil to replace the liveGDB with the workGDB
+    for root, dirs, files in os.walk(work, topdown=False):
+        files = [f for f in files if '.lock'not in f]
+        for f in files:
+            shutil.copy2(os.path.join(work, f), os.path.join(live, f))
+
+
+if __name__ == "__main__":
+    feedRoutine('AirportsWork', 'AirportsLive')
