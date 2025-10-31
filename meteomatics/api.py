@@ -15,6 +15,7 @@ import os
 import warnings
 from functools import wraps
 from io import StringIO
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import isodate
 import pandas as pd
@@ -60,7 +61,7 @@ class Config:
 
 def handle_ssl(func):
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not Config.get("VERIFY_SSL"):
             # Disable InsecureRequestWarnings if VERIFY_SSL is disabled.
             with warnings.catch_warnings():
@@ -74,7 +75,7 @@ def handle_ssl(func):
 def handle_proxy(func):
     """Passing the proxies dictionary to requests proxies optional argument."""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not len(Config.get("PROXIES")) == 0:
             return func(*args, proxies=Config.get("PROXIES"), **kwargs)
         return func(*args, **kwargs)
@@ -84,25 +85,35 @@ def handle_proxy(func):
 
 @handle_ssl
 @handle_proxy
-def get_request(*args, **kwargs):
+def get_request(*args: Any, **kwargs: Any) -> requests.Response:
     return requests.get(*args, **kwargs)
 
 
 @handle_ssl
 @handle_proxy
-def post_request(*args, **kwargs):
+def post_request(*args: Any, **kwargs: Any) -> requests.Response:
     return requests.post(*args, **kwargs)
 
 
-def create_path(_file):
+def create_path(_file: str) -> None:
     _path = os.path.dirname(_file)
     if not os.path.exists(_path) and len(_path) > 0:
         _logger.info("Create Path: {}".format(_path))
         os.makedirs(_path)
 
 
-def query_api(url, username, password, request_type="GET", timeout_seconds=330,
-              headers={'Accept': 'application/octet-stream'}):
+def query_api(
+    url: str,
+    username: str,
+    password: str,
+    request_type: str = "GET",
+    timeout_seconds: int = 330,
+    headers: Optional[Dict[str, str]] = None,
+) -> requests.Response:
+    # avoid mutable default for headers
+    if headers is None:
+        headers = {'Accept': 'application/octet-stream'}
+
     if request_type.lower() == "get":
         _logger.debug("Calling URL: {} (username = {})".format(url, username))
         response = get_request(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
@@ -131,7 +142,7 @@ def query_user_features(username, password):
     return extract_user_statistics(response)
 
 
-def query_user_limits(username, password):
+def query_user_limits(username: str, password: str) -> Dict[str, Tuple[int, int]]:
     """Get users usage and limits
 
     returns {limit[name]: (current_count, limit[value]) for limit in defined_limits}
@@ -143,8 +154,13 @@ def query_user_limits(username, password):
     return extract_user_limits(response)
 
 
-def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parameters, station=False,
-                                              na_values=NA_VALUES):
+def convert_time_series_binary_response_to_df(
+    bin_input: bytes,
+    coordinate_list: List[Union[str, Tuple[float, float]]],
+    parameters: List[str],
+    station: bool = False,
+    na_values: Tuple[int, ...] = NA_VALUES,
+) -> pd.DataFrame:
     df = raw_df_from_bin(bin_input, coordinate_list, parameters, na_values, station)
     # parse parameters which are queried as sql dates but arrive as date_num
     df = df.apply(lambda col: parse_date_num(col) if col.name.endswith(":sql") else col)
@@ -152,14 +168,31 @@ def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parame
     return df
 
 
-def raw_df_from_bin(bin_input, coordinate_list, parameters, na_values, station):
+def raw_df_from_bin(
+    bin_input: bytes,
+    coordinate_list: List[Any],
+    parameters: List[str],
+    na_values: Tuple[int, ...],
+    station: bool,
+) -> pd.DataFrame:
     binary_parser = BinaryParser(BinaryReader(bin_input), na_values)
     df = binary_parser.parse(parameters, station, coordinate_list)
     return df
 
 
-def query_station_list(username, password, source=None, parameters=None, startdate=None, enddate=None, location=None,
-                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET', elevation=None, id=None):
+def query_station_list(
+    username: str,
+    password: str,
+    source: Optional[str] = None,
+    parameters: Optional[List[str]] = None,
+    startdate: Optional[dt.datetime] = None,
+    enddate: Optional[dt.datetime] = None,
+    location: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    elevation: Optional[float] = None,
+    id: Optional[str] = None,
+) -> pd.DataFrame:
     """Function to query available stations in API
     source as string
     parameters as list
@@ -634,9 +667,26 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
     return
 
 
-def query_png_timeseries(prefixpath, startdate, enddate, interval, parameter, lat_N, lon_W, lat_S, lon_E, res_lat,
-                         res_lon, username, password, model=None, ens_select=None, interp_select=None,
-                         api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
+def query_png_timeseries(
+    prefixpath,
+    startdate,
+    enddate,
+    interval,
+    parameter,
+    lat_N,
+    lon_W,
+    lat_S,
+    lon_E,
+    res_lat,
+    res_lon,
+    username,
+    password,
+    model=None,
+    ens_select=None,
+    interp_select=None,
+    api_base_url=DEFAULT_API_BASE_URL,
+    request_type="GET",
+):
     """Queries a series of png's for the requested time period and area from the Meteomatics API. The retrieved png's
     are saved to the directory prefixpath.
     request_type is one of 'GET'/'POST'
@@ -663,8 +713,8 @@ def query_png_timeseries(prefixpath, startdate, enddate, interval, parameter, la
     return
 
 
-def arange(start, stop, step):
-    data = []
+def arange(start: float, stop: float, step: float) -> List[float]:
+    data: List[float] = []
     if start >= stop:
         return data
     while start <= stop:
