@@ -5,7 +5,7 @@
 import argparse
 import logging
 import sys
-from examples.credentials import username as username_default, password as password_default
+from credentials import username as username_default, password as password_default
 
 from meteomatics.logger import create_log_handler
 from meteomatics._constants_ import LOGGERNAME
