@@ -1,4 +1,4 @@
-from examples.example import run_example
+from example import run_example
 import datetime as dt
 import meteomatics.api as api
 

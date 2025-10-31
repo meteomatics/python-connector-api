@@ -1,4 +1,4 @@
-from examples.example import run_example
+from example import run_example
 import meteomatics.api as api
 from meteomatics.exceptions import Forbidden
 import datetime as dt

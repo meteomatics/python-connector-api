@@ -3,7 +3,7 @@ import datetime as dt
 
 import pytz
 
-from examples.example import run_example
+from example import run_example
 from meteomatics._constants_ import DEFAULT_API_BASE_URL, NA_VALUES
 from meteomatics.api import query_api, raw_df_from_bin
 
