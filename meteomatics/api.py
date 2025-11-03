@@ -471,7 +471,7 @@ def query_grid_unpivoted(
     request_type: str = "GET",
     na_values: Tuple[Any, ...] = NA_VALUES,
 ) -> pd.DataFrame:
-    """Retrieve a rectangular grid for a more than one valid date.
+    """Retrieve a rectangular grid for a more then one valid date.
 
     Internally calls query_grid for each of `valid_dates`. Then parses the
     responses into a data frame with MultiIndex(valid_date, lat, lon) and a
