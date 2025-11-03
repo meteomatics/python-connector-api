@@ -2,3 +2,5 @@ __pycache__
 .idea
 .gitignore
 *.pyc
+examples/grid_target.png
+examples/path_netcdf/
