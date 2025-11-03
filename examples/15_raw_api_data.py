@@ -23,7 +23,7 @@ def data_changer(df):
 
 
 def dataframe_directly_from_binary_data(username: str, password: str, _logger):
-    startdate_ts = dt.datetime.now(datetime.UTC).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    startdate_ts = dt.datetime.now(tz=pytz.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     enddate_ts = (startdate_ts + dt.timedelta(days=1))
     url = f'{DEFAULT_API_BASE_URL}/{startdate_ts.isoformat()}Z--{enddate_ts.isoformat()}Z:PT1H/t_2m:C,wind_speed_10m:ms/47.249297,9.342854+50.0,10.0/bin?connector=python_v2.11.4&model=mix'
 
