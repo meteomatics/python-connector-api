@@ -22,7 +22,6 @@ import isodate
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
-from meteomatics.deprecated import deprecated
 
 from ._constants_ import DEFAULT_API_BASE_URL, VERSION, TIME_SERIES_TEMPLATE, GRID_TEMPLATE, POLYGON_TEMPLATE, \
     GRID_TIME_SERIES_TEMPLATE, GRID_PNG_TEMPLATE, LIGHTNING_TEMPLATE, NETCDF_TEMPLATE, STATIONS_LIST_TEMPLATE, \
@@ -34,7 +33,7 @@ from .parsing_util import all_entries_postal, build_coordinates_str_for_polygon,
     build_coordinates_str_from_postal_codes, \
     build_response_params, convert_grid_binary_response_to_df, convert_lightning_response_to_df, \
     convert_polygon_response_to_df, \
-    parse_date_num, extract_user_statistics, parse_ens, parse_query_station_params, \
+    parse_date_num, parse_ens, parse_query_station_params, \
     parse_query_station_timeseries_params, \
     parse_time_series_params, parse_url_for_post_data, localize_datenum, sanitize_datetime, set_index_for_ts, \
     extract_user_limits
@@ -138,16 +137,6 @@ def query_api(
         raise exc(response.text)
 
     return response
-
-
-@deprecated("Do not programmatically rely on user features since the returned keys can change over time.")
-def query_user_features(username, password):
-    """Get user features"""
-    response = get_request(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
-    if response.status_code != requests.codes.ok:
-        exc = API_EXCEPTIONS[response.status_code]
-        raise exc(response.text)
-    return extract_user_statistics(response)
 
 
 def query_user_limits(username: str, password: str) -> Dict[str, Tuple[int, int]]:
