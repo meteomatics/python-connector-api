@@ -200,11 +200,19 @@ def convert_polygon_response_to_df(csv):
 
 def datenum_to_date(date_num):
     """Transform date_num to datetime object.
+    Note
+    ----
+    Python date objects in the datetime library are based on the proleptic Gregorian calendar starting with day 1 being
+    the date January 1 of year 1 (i.e. 01.01.0001). The Meteomatics serial datenumber also uses the proleptic Gregorian
+    calendar with reference to ISO8601 which has a year zero ("0000"). Here day 1 represents the date January 1 of
+    year 0 (or 1 BCE, or 01.01.0000).
 
     Returns pd.NaT on invalid input"""
     try:
-        total_seconds = round(dt.timedelta(days=date_num - 366).total_seconds())
-        return dt.datetime(1, 1, 1) + dt.timedelta(seconds=total_seconds) - dt.timedelta(days=1)
+        days_in_year_zero = 366 # Year 0000 is a leap year
+        seconds_since_year_one = round(dt.timedelta(days=date_num - days_in_year_zero).total_seconds())
+        # We subtract 1 day because we would otherwise count 01.01.0001 twice.
+        return dt.datetime(1, 1, 1) + dt.timedelta(seconds=seconds_since_year_one) - dt.timedelta(days=1)
     except (OverflowError, ValueError):
         return pd.NaT
 
