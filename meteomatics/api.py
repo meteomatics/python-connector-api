@@ -178,7 +178,7 @@ def convert_time_series_binary_response_to_df(
 
 def raw_df_from_bin(
     bin_input: bytes,
-    coordinate_list: List[Any],
+    coordinate_list: List[Union[str, Tuple[float, float]]],
     parameters: List[str],
     na_values: Tuple[Any, ...],
     station: bool,
@@ -357,7 +357,9 @@ def query_time_series(
 ) -> pd.DataFrame:
     """Retrieve a time series for one or more coordinates.
 
-    coordinate_list can contain (lat,lon) tuples or postal-code strings (all entries must be postal codes then).
+    coordinate_list should be either one (lat,lon) tuples or postal-code strings
+    (i.e. must contain 'postal_' prefix), mixing the two doesn't work
+
     If ensemble selection is requested, additional columns for ensemble members may be returned.
 
     Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
@@ -415,7 +417,20 @@ def query_grid(
     request_type: str = "GET",
     na_values: Tuple[Any, ...] = NA_VALUES,
     **kwargs: Any
-) -> Union[pd.DataFrame, Dict[dt.datetime, pd.DataFrame]]:
+) -> pd.DataFrame:
+    """Retrieve a rectangular grid for a single valid date.
+
+    Start datetime must be timezone-aware in UTC or will be interpreted as UTC.
+
+    Parameters:
+        lat_N, lon_W, lat_S, lon_E (float): Bounding box coordinates (north, west, south, east).
+        res_lat, res_lon (float): Spatial resolution in degrees for latitude and longitude.
+        ens_select (Optional[str]): Ensemble selection string (returns ensemble members if used).
+        na_values (tuple): Values to be interpreted as missing (converted to NaN).
+
+    Returns:
+        pd.DataFrame with values of the parameter, lat as index, lon as columns
+    """
     # interpret time as UTC
     startdate = sanitize_datetime(startdate)
 
@@ -456,6 +471,13 @@ def query_grid_unpivoted(
     request_type: str = "GET",
     na_values: Tuple[Any, ...] = NA_VALUES,
 ) -> pd.DataFrame:
+    """Retrieve a rectangular grid for a more than one valid date.
+
+    Internally calls query_grid for each of `valid_dates`. Then parses the
+    responses into a data frame with MultiIndex(valid_date, lat, lon) and a
+    column per each of requested `parameters`.
+
+    """
     idxcols = ['valid_date', 'lat', 'lon']
     vd_dfs = []
 
@@ -824,7 +846,7 @@ def query_grid_png(
     The PNG is produced server-side from the specified grid parameter and written to the
     specified file path.
 
-    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    Start datetime must be timezone-aware in UTC or will be interpreted as UTC.
     If ensemble selection is requested, additional columns for ensemble members may be returned.
 
     Returns:
