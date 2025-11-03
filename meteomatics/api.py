@@ -139,12 +139,12 @@ def query_api(
     return response
 
 
-def query_user_limits(username: str, password: str) -> Dict[str, Tuple[int, int]]:
+def query_user_limits(username: str, password: str, api_base_url: str = DEFAULT_API_BASE_URL) -> Dict[str, Tuple[int, int]]:
     """Get users usage and limits
 
     returns {limit[name]: (current_count, limit[value]) for limit in defined_limits}
     """
-    response = get_request(DEFAULT_API_BASE_URL + '/user_stats_json', auth=(username, password))
+    response = get_request(api_base_url + '/user_stats_json', auth=(username, password))
     if response.status_code != requests.codes.ok:
         exc = API_EXCEPTIONS[response.status_code]
         raise exc(response.text)
