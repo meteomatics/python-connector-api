@@ -147,7 +147,7 @@ def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parame
                                               na_values=NA_VALUES):
     df = raw_df_from_bin(bin_input, coordinate_list, parameters, na_values, station)
     # parse parameters which are queried as sql dates but arrive as date_num
-    df = df.apply(lambda col: parse_date_num(col) if col.name.endswith(":sql") else col)
+    df = df.apply(lambda col: parse_date_num(col).dt.tz_localize("UTC") if col.name.endswith(":sql") else col)
     df = set_index_for_ts(df, station, coordinate_list)
     return df
 
