@@ -15,7 +15,9 @@ import os
 import warnings
 from functools import wraps
 from io import StringIO
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import datetime as dt
 import isodate
 import pandas as pd
 import requests
@@ -41,10 +43,17 @@ _logger = logging.getLogger(LOGGERNAME)
 
 
 class Config:
+    """Connector configuration.
+
+    Attributes:
+        VERIFY_SSL (bool): If False, SSL verification is disabled for requests.
+            This can be useful for corporate environments where "secure" proxies are deployed.
+        PROXIES (dict): Optional dictionary mapping protocol to the proxy URL, e.g. {'http': 'http://proxy:8080'}.
+            If empty, no proxies are used.
+    """
     _config = {
-        "VERIFY_SSL": True,  # Disable SSL verification. This setting is useful for corporate environments where
-        # "secure" proxies are deployed.
-        "PROXIES": {}  # proxies – (optional) Dictionary mapping protocol to the URL of the proxy.
+        "VERIFY_SSL": True,
+        "PROXIES": {}
     }
 
     @staticmethod
@@ -60,7 +69,7 @@ class Config:
 
 def handle_ssl(func):
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not Config.get("VERIFY_SSL"):
             # Disable InsecureRequestWarnings if VERIFY_SSL is disabled.
             with warnings.catch_warnings():
@@ -74,7 +83,7 @@ def handle_ssl(func):
 def handle_proxy(func):
     """Passing the proxies dictionary to requests proxies optional argument."""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not len(Config.get("PROXIES")) == 0:
             return func(*args, proxies=Config.get("PROXIES"), **kwargs)
         return func(*args, **kwargs)
@@ -84,25 +93,35 @@ def handle_proxy(func):
 
 @handle_ssl
 @handle_proxy
-def get_request(*args, **kwargs):
+def get_request(*args: Any, **kwargs: Any) -> requests.Response:
     return requests.get(*args, **kwargs)
 
 
 @handle_ssl
 @handle_proxy
-def post_request(*args, **kwargs):
+def post_request(*args: Any, **kwargs: Any) -> requests.Response:
     return requests.post(*args, **kwargs)
 
 
-def create_path(_file):
+def create_path(_file: str) -> None:
     _path = os.path.dirname(_file)
     if not os.path.exists(_path) and len(_path) > 0:
         _logger.info("Create Path: {}".format(_path))
         os.makedirs(_path)
 
 
-def query_api(url, username, password, request_type="GET", timeout_seconds=330,
-              headers={'Accept': 'application/octet-stream'}):
+def query_api(
+    url: str,
+    username: str,
+    password: str,
+    request_type: str = "GET",
+    timeout_seconds: int = 330,
+    headers: Optional[Dict[str, str]] = None,
+) -> requests.Response:
+    # avoid mutable default for headers
+    if headers is None:
+        headers = {'Accept': 'application/octet-stream'}
+
     if request_type.lower() == "get":
         _logger.debug("Calling URL: {} (username = {})".format(url, username))
         response = get_request(url, timeout=timeout_seconds, auth=(username, password), headers=headers)
@@ -131,7 +150,7 @@ def query_user_features(username, password):
     return extract_user_statistics(response)
 
 
-def query_user_limits(username, password):
+def query_user_limits(username: str, password: str) -> Dict[str, Tuple[int, int]]:
     """Get users usage and limits
 
     returns {limit[name]: (current_count, limit[value]) for limit in defined_limits}
@@ -143,8 +162,13 @@ def query_user_limits(username, password):
     return extract_user_limits(response)
 
 
-def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parameters, station=False,
-                                              na_values=NA_VALUES):
+def convert_time_series_binary_response_to_df(
+    bin_input: bytes,
+    coordinate_list: List[Union[str, Tuple[float, float]]],
+    parameters: List[str],
+    station: bool = False,
+    na_values: Tuple[Any, ...] = NA_VALUES,
+) -> pd.DataFrame:
     df = raw_df_from_bin(bin_input, coordinate_list, parameters, na_values, station)
     # parse parameters which are queried as sql dates but arrive as date_num
     df = df.apply(lambda col: parse_date_num(col).dt.tz_localize("UTC") if col.name.endswith(":sql") else col)
@@ -152,21 +176,40 @@ def convert_time_series_binary_response_to_df(bin_input, coordinate_list, parame
     return df
 
 
-def raw_df_from_bin(bin_input, coordinate_list, parameters, na_values, station):
+def raw_df_from_bin(
+    bin_input: bytes,
+    coordinate_list: List[Union[str, Tuple[float, float]]],
+    parameters: List[str],
+    na_values: Tuple[Any, ...],
+    station: bool,
+) -> pd.DataFrame:
     binary_parser = BinaryParser(BinaryReader(bin_input), na_values)
     df = binary_parser.parse(parameters, station, coordinate_list)
     return df
 
 
-def query_station_list(username, password, source=None, parameters=None, startdate=None, enddate=None, location=None,
-                       api_base_url=DEFAULT_API_BASE_URL, request_type='GET', elevation=None, id=None):
-    """Function to query available stations in API
-    source as string
-    parameters as list
-    enddate as datetime object
-    location as string (e.g. "40,10")
-    request_type is one of 'GET'/'POST'
-    elevation as integer/float (e.g. 1050 ; 0.5)
+def query_station_list(
+    username: str,
+    password: str,
+    source: Optional[str] = None,
+    parameters: Optional[List[str]] = None,
+    startdate: Optional[dt.datetime] = None,
+    enddate: Optional[dt.datetime] = None,
+    location: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    elevation: Optional[float] = None,
+    id: Optional[str] = None,
+) -> pd.DataFrame:
+    """Query available observation stations.
+
+    Filters can be provided for source, parameters, date range, location (as "lat,lon"),
+    elevation and station id. The query can be send to API as "GET" or "POST" request type.
+
+    See also: https://www.meteomatics.com/en/api/request/advanced-requests/api-request-weather-station-mos-data/#find_station
+
+    Returns:
+        pandas.DataFrame: Station metadata with 'lat' and 'lon' columns added.
     """
     url_params_dict = parse_query_station_params(source, parameters, startdate, enddate, location, elevation, id)
 
@@ -184,18 +227,37 @@ def query_station_list(username, password, source=None, parameters=None, startda
     return sl
 
 
-def query_station_timeseries(startdate, enddate, interval, parameters, username, password, model='mix-obs',
-                             latlon_tuple_list=None, wmo_ids=None, mch_ids=None, general_ids=None, hash_ids=None,
-                             metar_ids=None, temporal_interpolation=None, spatial_interpolation=None, on_invalid=None,
-                             api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES):
-    """Retrieve a time series from the Meteomatics Weather API.
-    Requested can be by WMO ID, Metar ID or coordinates.
-    Start and End dates have to be in UTC.
-    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
-    request_type is one of 'GET/POST'
-    na_values: list of special Values that get converted to NaN.
-        Default = [-666, -777, -888, -999]
-        See also https://www.meteomatics.com/en/api/response/#reservedvalues
+def query_station_timeseries(
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameters: List[str],
+    username: str,
+    password: str,
+    model: Optional[str] = "mix-obs",
+    latlon_tuple_list: Optional[List[Tuple[float, float]]] = None,
+    wmo_ids: Optional[List[str]] = None,
+    mch_ids: Optional[List[str]] = None,
+    general_ids: Optional[List[str]] = None,
+    hash_ids: Optional[List[str]] = None,
+    metar_ids: Optional[List[str]] = None,
+    temporal_interpolation: Optional[str] = None,
+    spatial_interpolation: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    na_values: Tuple[Any, ...] = NA_VALUES,
+) -> pd.DataFrame:
+    """Retrieve station data as time series for given IDs or coordinates.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    Coordinates or station identifiers (WMO ID, METAR ID) may be used.
+    na_values: numeric values in the response which will be converted to NaN. Defaults to [-666, -777, -888, -999].
+
+    See also: https://www.meteomatics.com/en/api/request/advanced-requests/api-request-weather-station-mos-data/#station_obs
+
+    Returns:
+        pandas.DataFrame: Time series indexed by timestamp (DateTimeIndex).
     """
 
     # set time zone info to UTC if necessary
@@ -223,19 +285,32 @@ def query_station_timeseries(startdate, enddate, interval, parameters, username,
                                                      station=True, na_values=na_values)
 
 
-def query_special_locations_timeseries(startdate, enddate, interval, parameters, username, password, model='mix',
-                                       postal_codes=None, temporal_interpolation=None, spatial_interpolation=None,
-                                       on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
-                                       na_values=NA_VALUES):
-    """Retrieve a time series from the Meteomatics Weather API.
-    Requested locations can also be specified by Postal Codes;
-        Input as dictionary, e.g.: postal_codes={'DE': [71679,70173], ...}.
-    Start and End dates have to be in UTC.
-    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
-    request_type is one of 'GET/POST'
-    na_values: list of special Values that get converted to NaN.
-        Default = [-666, -777, -888, -999]
-        See also https://www.meteomatics.com/en/api/response/#reservedvalues
+def query_special_locations_timeseries(
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameters: List[str],
+    username: str,
+    password: str,
+    model: Optional[str] = "mix",
+    postal_codes: Optional[Dict[str, List[int]]] = None,
+    temporal_interpolation: Optional[str] = None,
+    spatial_interpolation: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    na_values: Tuple[Any, ...] = NA_VALUES,
+) -> pd.DataFrame:
+    """Retrieve time series for locations specified by postal codes.
+
+    postal_codes should be a dict mapping country codes to lists of postal codes,
+    e.g. {'DE': [71679, 70173]}.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    na_values: numeric values in the response which will be converted to NaN. Defaults to [-666, -777, -888, -999].
+
+    Returns:
+        pandas.DataFrame: Time series indexed by timestamp (DateTimeIndex).
     """
 
     # set time zone info to UTC if necessary
@@ -262,17 +337,36 @@ def query_special_locations_timeseries(startdate, enddate, interval, parameters,
                                                      na_values=na_values)
 
 
-def query_time_series(coordinate_list, startdate, enddate, interval, parameters, username, password, model=None,
-                      ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL,
-                      request_type='GET', cluster_select=None, na_values=NA_VALUES,
-                      **kwargs):
-    """Retrieve a time series from the Meteomatics Weather API.
-    Start and End dates have to be in UTC.
-    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
-    request_type is one of 'GET'/'POST'
-    na_values: list of special Values that get converted to NaN.
-        Default = [-666, -777, -888, -999]
-        See also https://www.meteomatics.com/en/api/response/#reservedvalues
+def query_time_series(
+    coordinate_list: List[Union[str, Tuple[float, float]]],
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameters: List[str],
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    cluster_select: Optional[str] = None,
+    na_values: Tuple[Any, ...] = NA_VALUES,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """Retrieve a time series for one or more coordinates.
+
+    coordinate_list should be either one (lat,lon) tuples or postal-code strings
+    (i.e. must contain 'postal_' prefix), mixing the two doesn't work
+
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    na_values: numeric values in the response which will be converted to NaN. Defaults to [-666, -777, -888, -999].
+
+    Returns:
+        pandas.DataFrame: Time series indexed by timestamp (DateTimeIndex).
     """
 
     # set time zone info to UTC if necessary
@@ -304,10 +398,39 @@ def query_time_series(coordinate_list, startdate, enddate, interval, parameters,
     return df
 
 
-def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password, model=None,
-               ens_select=None, interp_select=None, on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET',
-               na_values=NA_VALUES,
-               **kwargs):
+def query_grid(
+    startdate: dt.datetime,
+    parameter_grid: str,
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    na_values: Tuple[Any, ...] = NA_VALUES,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """Retrieve a rectangular grid for a single valid date.
+
+    Start datetime must be timezone-aware in UTC or will be interpreted as UTC.
+
+    Parameters:
+        lat_N, lon_W, lat_S, lon_E (float): Bounding box coordinates (north, west, south, east).
+        res_lat, res_lon (float): Spatial resolution in degrees for latitude and longitude.
+        ens_select (Optional[str]): Ensemble selection string (returns ensemble members if used).
+        na_values (tuple): Values to be interpreted as missing (converted to NaN).
+
+    Returns:
+        pd.DataFrame with values of the parameter, lat as index, lon as columns
+    """
     # interpret time as UTC
     startdate = sanitize_datetime(startdate)
 
@@ -330,9 +453,31 @@ def query_grid(startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, r
     response = query_api(url, username, password, request_type=request_type)
     return convert_grid_binary_response_to_df(response.content, parameter_grid, na_values=na_values)
 
+def query_grid_unpivoted(
+    valid_dates: List[dt.datetime],
+    parameters: List[str],
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    request_type: str = "GET",
+    na_values: Tuple[Any, ...] = NA_VALUES,
+) -> pd.DataFrame:
+    """Retrieve a rectangular grid for a more then one valid date.
 
-def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username, password,
-                         model=None, ens_select=None, interp_select=None, on_invalid=None, request_type='GET', na_values=NA_VALUES):
+    Internally calls query_grid for each of `valid_dates`. Then parses the
+    responses into a data frame with MultiIndex(valid_date, lat, lon) and a
+    column per each of requested `parameters`.
+
+    """
     idxcols = ['valid_date', 'lat', 'lon']
     vd_dfs = []
 
@@ -368,18 +513,39 @@ def query_grid_unpivoted(valid_dates, parameters, lat_N, lon_W, lat_S, lon_E, re
     return data
 
 
-def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W, lat_S, lon_E,
-                          res_lat, res_lon, username, password, model=None, ens_select=None, interp_select=None,
-                          on_invalid=None, api_base_url=DEFAULT_API_BASE_URL, request_type='GET', na_values=NA_VALUES,
-                          **kwargs):
-    """Retrieve a grid time series from the Meteomatics Weather API.
-       Start and End dates have to be in UTC.
-       Returns a Pandas `DataFrame` with a `DateTimeIndex`.
-       request_type is one of 'GET'/'POST'
-       na_values: list of special Values that get converted to NaN.
-        Default = [-666, -777, -888, -999]
-        See also https://www.meteomatics.com/en/api/response/#reservedvalues
-       """
+def query_grid_timeseries(
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameters: List[str],
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    na_values: Tuple[Any, ...] = NA_VALUES,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """Retrieve a grid (aka Rectangle) time series as tabular data.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+    na_values: numeric values in the response which will be converted to NaN. Defaults to [-666, -777, -888, -999].
+
+    See also: https://www.meteomatics.com/en/api/request/required-parameters/coordinate-description/
+
+    Returns:
+        pandas.DataFrame: Time-indexed grid time series; each column corresponds to a grid point.
+    """
 
     # set time zone info to UTC if necessary
     startdate = sanitize_datetime(startdate)
@@ -414,23 +580,36 @@ def query_grid_timeseries(startdate, enddate, interval, parameters, lat_N, lon_W
     return df
 
 
-def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, aggregation, username,
-                  password, operator=None, model=None, ens_select=None, interp_select=None, on_invalid=None,
-                  api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None, **kwargs):
-    """Retrieve a time series from the Meteomatics Weather API for a selected polygon.
-    Start and End dates have to be in UTC.
-    Returns a Pandas `DataFrame` with a `DateTimeIndex`.
-    request_type is one of 'GET'/'POST'
+def query_polygon(
+    latlon_tuple_lists: List[List[Tuple[float, float]]],
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameters: List[str],
+    aggregation: List[str],
+    username: str,
+    password: str,
+    operator: Optional[str] = None,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    on_invalid: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    cluster_select: Optional[str] = None,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """Retrieve time series aggregated over polygon geometries.
 
-    Polygons have to be supplied in lists containing lat/lon tuples. For example, input of 2 polygons:
-    [[(45.1, 8.2), (45.2, 8.0), (46.2, 7.5)], [(55.1, 8.2), (55.2, 8.0), (56.2, 7.5)]]
-    If more than 1 polygon is supplied, then the operator key has to be defined!
+    Polygons must be lists of (lat,lon) tuples. Aggregation may be specified per polygon (mean, max, min, etc.).
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+    na_values: numeric values in the response which will be converted to NaN. Defaults to [-666, -777, -888, -999].
 
-    The aggregation parameter can be chosen from: mean, max, min, median, mode. Input format is a list of strings.
-    In case of multiple polygons with different aggregators the number of aggregators and polygons must match
-    and the operator has to be set to None!
+    See also: https://www.meteomatics.com/en/api/request/required-parameters/coordinate-description/
 
-    The operator can be either D (difference) or U (union). Input format is a string.
+    Returns:
+        pandas.DataFrame: Aggregated time series indexed by timestamp (DateTimeIndex).
     """
 
     # set time zone info to UTC if necessary
@@ -456,12 +635,31 @@ def query_polygon(latlon_tuple_lists, startdate, enddate, interval, parameters, 
     return df
 
 
-def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, password,
-                     api_base_url=DEFAULT_API_BASE_URL, request_type='GET', model='mix'):
-    """Queries lightning strokes in the specified area during the specified time via the Meteomatics API.
-    Returns a Pandas 'DataFrame'.
-    request_type is one of 'GET'/'POST'
+def query_lightnings(
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    username: str,
+    password: str,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    model: str = "mix",
+) -> pd.DataFrame:
+    """Query lightning strokes in a bounding box and time range.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    The response is parsed into a DataFrame with one row per lightning stroke
+    and relevant metadata columns.
+
+    See also: https://www.meteomatics.com/en/api/available-parameters/weather-parameter/lightnings/#lightningdensity
+
+    Returns:
+        pandas.DataFrame: Lightning stroke records for the requested area and period.
     """
+
     # interpret time as UTC
     startdate = sanitize_datetime(startdate)
     enddate = sanitize_datetime(enddate)
@@ -484,11 +682,37 @@ def query_lightnings(startdate, enddate, lat_N, lon_W, lat_S, lon_E, username, p
     return convert_lightning_response_to_df(response.text)
 
 
-def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon,
-                 username, password, model=None, ens_select=None, interp_select=None,
-                 api_base_url=DEFAULT_API_BASE_URL, request_type='GET', cluster_select=None):
-    """Queries a netCDF file form the Meteomatics API and stores it in filename.
-    request_type is one of 'GET'/'POST'
+def query_netcdf(
+    filename: str,
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameter_netcdf: str,
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+    cluster_select: Optional[str] = None,
+) -> None:
+    """Download a netCDF file from the Meteomatics API and save to `filename`.
+
+    Request returns binary netCDF content which is written to the given path.
+    Note: the target directory will be created if it does not exist.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+
+    Returns:
+        None
     """
 
     # set time zone info to UTC if necessary
@@ -528,8 +752,16 @@ def query_netcdf(filename, startdate, enddate, interval, parameter_netcdf, lat_N
     return
 
 
-def query_init_date(startdate, enddate, interval, parameter, username, password, model,
-                    api_base_url=DEFAULT_API_BASE_URL):
+def query_init_date(
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameter: str,
+    username: str,
+    password: str,
+    model: str,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+) -> pd.DataFrame:
     # set time zone info to UTC if necessary
     startdate = sanitize_datetime(startdate)
     enddate = sanitize_datetime(enddate)
@@ -562,7 +794,13 @@ def query_init_date(startdate, enddate, interval, parameter, username, password,
     return df
 
 
-def query_available_time_ranges(parameters, username, password, model, api_base_url=DEFAULT_API_BASE_URL):
+def query_available_time_ranges(
+    parameters: List[str],
+    username: str,
+    password: str,
+    model: str,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+) -> pd.DataFrame:
     url = AVAILABLE_TIME_RANGES_TEMPLATE.format(api_base_url=api_base_url,
                                                 model=model, parameters=",".join(parameters))
 
@@ -585,12 +823,34 @@ def query_available_time_ranges(parameters, username, password, model, api_base_
     return df
 
 
-def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon_E, res_lat, res_lon, username,
-                   password, model=None, ens_select=None, interp_select=None, api_base_url=DEFAULT_API_BASE_URL,
-                   request_type='GET'):
-    """Gets a png image generated by the Meteomatics API from grid data (see method query_grid)
-    and saves it to the specified filename.
-    request_type is one of 'GET'/'POST'
+def query_grid_png(
+    filename: str,
+    startdate: dt.datetime,
+    parameter_grid: str,
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+) -> None:
+    """Request a PNG image for a single grid timestamp and save to `filename`.
+
+    The PNG is produced server-side from the specified grid parameter and written to the
+    specified file path.
+
+    Start datetime must be timezone-aware in UTC or will be interpreted as UTC.
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+
+    Returns:
+        None
     """
 
     # interpret time as UTC
@@ -634,12 +894,36 @@ def query_grid_png(filename, startdate, parameter_grid, lat_N, lon_W, lat_S, lon
     return
 
 
-def query_png_timeseries(prefixpath, startdate, enddate, interval, parameter, lat_N, lon_W, lat_S, lon_E, res_lat,
-                         res_lon, username, password, model=None, ens_select=None, interp_select=None,
-                         api_base_url=DEFAULT_API_BASE_URL, request_type='GET'):
-    """Queries a series of png's for the requested time period and area from the Meteomatics API. The retrieved png's
-    are saved to the directory prefixpath.
-    request_type is one of 'GET'/'POST'
+def query_png_timeseries(
+    prefixpath: str,
+    startdate: dt.datetime,
+    enddate: dt.datetime,
+    interval: dt.timedelta,
+    parameter: str,
+    lat_N: float,
+    lon_W: float,
+    lat_S: float,
+    lon_E: float,
+    res_lat: float,
+    res_lon: float,
+    username: str,
+    password: str,
+    model: Optional[str] = None,
+    ens_select: Optional[str] = None,
+    interp_select: Optional[str] = None,
+    api_base_url: str = DEFAULT_API_BASE_URL,
+    request_type: str = "GET",
+) -> None:
+    """Download a sequence of PNG images for a time range and save them under `prefixpath`.
+
+    Each image filename is constructed from the parameter and timestamp. The function iterates
+    from startdate to enddate with the provided interval and saves each PNG using query_grid_png.
+
+    Start and end datetimes must be timezone-aware in UTC or will be interpreted as UTC.
+    If ensemble selection is requested, additional columns for ensemble members may be returned.
+
+    Returns:
+        None
     """
 
     # iterate over all requested dates
@@ -663,8 +947,8 @@ def query_png_timeseries(prefixpath, startdate, enddate, interval, parameter, la
     return
 
 
-def arange(start, stop, step):
-    data = []
+def arange(start: float, stop: float, step: float) -> List[float]:
+    data: List[float] = []
     if start >= stop:
         return data
     while start <= stop:
