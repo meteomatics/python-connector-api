@@ -16,8 +16,12 @@ def data_changer(df):
     df = df.reset_index()
     idx_start = list(df[df['validdate'] == startdate].index)
     idx_end = list(df[df['validdate'] == enddate].index)
-    for i in range(len(idx_start)):
-        df.loc[idx_start[i]: idx_end[i], 'wind_speed_10m:ms'] = value
+
+    # Use iloc for positional slicing (end is exclusive → +1)
+    col_pos = df.columns.get_loc('wind_speed_10m:ms')
+    for s, e in zip(idx_start, idx_end):
+        df.iloc[s:e+1, col_pos] = value
+
     df = df.set_index(['lat', 'lon', 'validdate'], drop=True)
     return df
 

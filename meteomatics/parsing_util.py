@@ -354,22 +354,24 @@ def set_index_for_ts(df, is_station, coordinate_list):
             else:
                 df['lat'] = coordinate_list[0][0]
                 df['lon'] = coordinate_list[0][1]
-        # replace lat lon with inital coordinates
-        split_point = len(df) / len(coordinate_list)
+        # replace lat lon with initial coordinates chunk by chunk
+        chunk_size = len(df) // len(coordinate_list)
         df.reset_index(inplace=True)
+        lat_col = df.columns.get_loc('lat')
+        lon_col = df.columns.get_loc('lon')
         for i in range(len(coordinate_list)):
-            df.loc[i * split_point: (i + 1) * split_point, 'lat'] = coordinate_list[i][0]
-            df.loc[i * split_point: (i + 1) * split_point, 'lon'] = coordinate_list[i][1]
+            df.iloc[i * chunk_size: (i + 1) * chunk_size, lat_col] = coordinate_list[i][0]
+            df.iloc[i * chunk_size: (i + 1) * chunk_size, lon_col] = coordinate_list[i][1]
         # set multiindex
         df = df.set_index(['lat', 'lon', 'validdate'])
     else:
         col_name = 'postal_code' if is_postal else 'station_id'
-        split_point = len(df) / len(coordinate_list)
+        chunk_size = len(df) // len(coordinate_list)
         if col_name not in df.columns:
             df[col_name] = ""  # create new column
-            new_col_index = len(df.columns)-1  # use iloc for indexed based slicing
+            new_col_index = len(df.columns) - 1  # use iloc for indexed based slicing
             for i in range(len(coordinate_list)):
-                df.iloc[int(i * split_point): int((i + 1) * split_point), new_col_index] = coordinate_list[i]
+                df.iloc[i * chunk_size: (i + 1) * chunk_size, new_col_index] = coordinate_list[i]
         # set multiindex
         df = df.reset_index().set_index([col_name, 'validdate'])
         df = df.sort_index()
