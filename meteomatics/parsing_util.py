@@ -5,7 +5,6 @@ from io import StringIO
 
 import pandas as pd
 import pytz
-from meteomatics.deprecated import deprecated
 
 from . import rounding
 from ._constants_ import VERSION, NA_VALUES
@@ -215,21 +214,6 @@ def datenum_to_date(date_num):
         return dt.datetime(1, 1, 1) + dt.timedelta(seconds=seconds_since_year_one) - dt.timedelta(days=1)
     except (OverflowError, ValueError):
         return pd.NaT
-
-
-@deprecated("This function will be removed/renamed because it only provides info about the licensing options "
-            "and not real user statistics. "
-            "In addition, do not programmatically rely on user features since the returned keys can change "
-            "over time due to internal changes.")
-def extract_user_statistics(response):
-    """Extract user statistics from HTTP response"""
-    data = response.json()
-    limits_of_interest = ['historic request option', 'model select option', 'area request option']
-    try:
-        return {key: data['user statistics'][key] for key in limits_of_interest}
-    except TypeError:
-        user_data = next(d for d in data['user statistics'] if d['username'] == username)
-        return {key: user_data[key] for key in limits_of_interest}
 
 
 def extract_user_limits(response):
