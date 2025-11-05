@@ -17,7 +17,7 @@ VERSION = None
 REQUIRED = [
     "isodate>=0.6.0",
     "requests>=2.21.0",
-    "pandas>=0.18.1",
+    "pandas>=1.1.5",
     "pathlib2>=2.3.5",
     'pytz'
 ]
