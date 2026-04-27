@@ -300,13 +300,12 @@ def parse_query_station_timeseries_params(model=None, on_invalid=None, temporal_
     return filter_none_from_dict(url_params_dict)
 
 
-def parse_time_series_params(model=None, ens_select=None, cluster_select=None, interp_select=None, on_invalid=None,
+def parse_time_series_params(model=None, ens_select=None, interp_select=None, on_invalid=None,
                              kwargs=None):
     url_params_dict = {
         'connector': VERSION,
         'model': model,
         'ens_select': ens_select,
-        'cluster_select': cluster_select,
         'interp_select': interp_select,
         'on_invalid': on_invalid,
     }
