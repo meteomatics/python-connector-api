@@ -340,7 +340,6 @@ def query_time_series(
     on_invalid: Optional[str] = None,
     api_base_url: str = DEFAULT_API_BASE_URL,
     request_type: str = "GET",
-    cluster_select: Optional[str] = None,
     na_values: Tuple[Any, ...] = NA_VALUES,
     **kwargs: Any
 ) -> pd.DataFrame:
@@ -364,7 +363,7 @@ def query_time_series(
 
     # build URL
     extended_params = parameters if ens_select is None else build_response_params(parameters, parse_ens(ens_select))
-    url_params = parse_time_series_params(model, ens_select, cluster_select, interp_select, on_invalid, kwargs)
+    url_params = parse_time_series_params(model, ens_select, interp_select, on_invalid, kwargs)
 
     is_postal = all_entries_postal(coordinate_list)
     coordinate_list_str = '+'.join(coordinate_list) if is_postal else "+".join(
@@ -424,7 +423,7 @@ def query_grid(
     startdate = sanitize_datetime(startdate)
 
     # build URL
-    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
+    url_params = parse_time_series_params(model=model, ens_select=ens_select,
                                           interp_select=interp_select, on_invalid=on_invalid, kwargs=kwargs)
     url = GRID_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -541,7 +540,7 @@ def query_grid_timeseries(
     enddate = sanitize_datetime(enddate)
 
     # build URL
-    url_params = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=None,
+    url_params = parse_time_series_params(model=model, ens_select=ens_select,
                                           interp_select=interp_select, on_invalid=on_invalid, kwargs=kwargs)
     url = GRID_TIME_SERIES_TEMPLATE.format(
         api_base_url=api_base_url,
@@ -585,7 +584,6 @@ def query_polygon(
     on_invalid: Optional[str] = None,
     api_base_url: str = DEFAULT_API_BASE_URL,
     request_type: str = "GET",
-    cluster_select: Optional[str] = None,
     **kwargs: Any
 ) -> pd.DataFrame:
     """Retrieve time series aggregated over polygon geometries.
@@ -606,7 +604,7 @@ def query_polygon(
     enddate = sanitize_datetime(enddate)
 
     # build URL
-    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select,
+    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select,
                                                interp_select=interp_select, on_invalid=on_invalid, kwargs=kwargs)
     coordinates = build_coordinates_str_for_polygon(latlon_tuple_lists, aggregation, operator)
     url = POLYGON_TEMPLATE.format(
@@ -690,7 +688,6 @@ def query_netcdf(
     interp_select: Optional[str] = None,
     api_base_url: str = DEFAULT_API_BASE_URL,
     request_type: str = "GET",
-    cluster_select: Optional[str] = None,
 ) -> None:
     """Download a netCDF file from the Meteomatics API and save to `filename`.
 
@@ -709,7 +706,7 @@ def query_netcdf(
     enddate = sanitize_datetime(enddate)
 
     # build URL
-    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select, cluster_select=cluster_select,
+    url_params_dict = parse_time_series_params(model=model, ens_select=ens_select,
                                                interp_select=interp_select)
     url = NETCDF_TEMPLATE.format(
         api_base_url=api_base_url,
