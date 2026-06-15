@@ -155,36 +155,36 @@ def convert_lightning_response_to_df(data):
         is_str = isinstance(data, basestring)  # python 2
     except NameError:
         is_str = isinstance(data, str)  # python 3
-    finally:
-        if is_str:
-            data = StringIO(data)
 
-        # parse response
-        try:
-            df = pd.read_csv(
-                data,
-                sep=";",
-                header=0,
-                encoding="utf-8",
-                parse_dates=['stroke_time:sql'],
-                index_col='stroke_time:sql'
-            )
+    if is_str:
+        data = StringIO(data)
 
-            if df.empty:
-                return df
+    # parse response
+    try:
+        df = pd.read_csv(
+            data,
+            sep=";",
+            header=0,
+            encoding="utf-8",
+            parse_dates=['stroke_time:sql'],
+            index_col='stroke_time:sql'
+        )
 
-            # mark index as UTC timezone
-            df = localize_datenum(df)
+        if df.empty:
+            return df
 
-        except:
-            raise WeatherApiException(input.getvalue())
+        # mark index as UTC timezone
+        df = localize_datenum(df)
 
-        # rename columns to make consistent with other csv file headers
-        df = df.reset_index().rename(
-            columns={'stroke_time:sql': 'validdate', 'stroke_lat:d': 'lat', 'stroke_lon:d': 'lon'})
-        df.set_index(['validdate', 'lat', 'lon'], inplace=True)
+    except:
+        raise WeatherApiException(input.getvalue())
 
-        return df
+    # rename columns to make consistent with other csv file headers
+    df = df.reset_index().rename(
+        columns={'stroke_time:sql': 'validdate', 'stroke_lat:d': 'lat', 'stroke_lon:d': 'lon'})
+    df.set_index(['validdate', 'lat', 'lon'], inplace=True)
+
+    return df
 
 
 def convert_polygon_response_to_df(csv):
